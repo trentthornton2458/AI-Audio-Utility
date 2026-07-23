@@ -14,6 +14,7 @@ class Settings(Preset):
     def from_preset(cls, preset: Preset) -> Settings:
         """Create a Settings instance from a Preset instance."""
         return cls(
+            version=preset.version,
             vocal_denoise_enabled=preset.vocal_denoise_enabled,
             vocal_denoise_intensity=preset.vocal_denoise_intensity,
             vocal_enhance_enabled=preset.vocal_enhance_enabled,
@@ -35,6 +36,7 @@ class Settings(Preset):
     def to_preset(self) -> Preset:
         """Convert Settings instance back to a Preset instance."""
         return Preset(
+            version=self.version,
             vocal_denoise_enabled=self.vocal_denoise_enabled,
             vocal_denoise_intensity=self.vocal_denoise_intensity,
             vocal_enhance_enabled=self.vocal_enhance_enabled,
