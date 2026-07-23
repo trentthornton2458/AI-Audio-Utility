@@ -73,7 +73,7 @@ def run_neural_pass(
     settings_hash = _hash_settings(denoise_enabled, denoise_intensity, enhance_enabled, enhance_intensity)
     output_path = cache_manager.stems_dir(track_id) / f"{filename_prefix}{settings_hash}.wav"
 
-    if output_path.is_file():
+    if cache_manager.verify_stem_wav(output_path):
         logger.info("Using cached neural %s pass for track %s: %s", stem_label, track_id, output_path)
         if progress_callback:
             progress_callback(1.0)

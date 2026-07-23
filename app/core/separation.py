@@ -67,7 +67,7 @@ def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tu
     vocal_path = stems_dir / VOCAL_FILENAME
     instrumental_path = stems_dir / INSTRUMENTAL_FILENAME
 
-    if vocal_path.is_file() and instrumental_path.is_file():
+    if cache_manager.verify_stem_wav(vocal_path) and cache_manager.verify_stem_wav(instrumental_path):
         logger.info("Using cached stems for track %s: %s, %s", track_id, vocal_path, instrumental_path)
         return vocal_path, instrumental_path
 
