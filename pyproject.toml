@@ -19,6 +19,7 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-qt",
+    "pyinstaller",
 ]
 
 [build-system]
