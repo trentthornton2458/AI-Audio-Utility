@@ -6,8 +6,10 @@ model weights are present (i.e. this is the user's first run).
 
 from __future__ import annotations
 
+import io
 import sys
 
+import app  # Ensures NullStream sys.stdout/sys.stderr fallback is active
 from PySide6.QtWidgets import QApplication, QDialog
 
 from app.cache import configure_logging, get_logger
