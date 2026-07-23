@@ -220,3 +220,50 @@ def test_main_window_render_job_failure_and_cancel_handling(qtbot, tmp_path):
     window._active_render_job = mock_job
     window.on_cancel_render_clicked()
     mock_job.cancel.assert_called_once()
+
+
+def test_extract_stems_runs_separation_only_not_full_render(qtbot, tmp_path):
+    """The 'Extract Stems' button must launch a SeparationJob, never the full RenderJob."""
+    mock_cache = MagicMock()
+    window = MainWindow(cache_manager=mock_cache)
+    qtbot.addWidget(window)
+
+    input_path = tmp_path / "input.wav"
+    input_path.touch()
+    window._current_input_path = input_path
+    window._normalized_path = tmp_path / "cache" / "track" / "normalized.wav"
+
+    mock_job = MagicMock()
+    mock_job.isRunning.return_value = False
+
+    with patch("app.ui.main_window.SeparationJob", return_value=mock_job) as mock_sep_cls, patch(
+        "app.ui.main_window.RenderJob"
+    ) as mock_render_cls:
+        window.on_extract_stems_requested()
+
+        mock_sep_cls.assert_called_once()
+        mock_job.start.assert_called_once()
+        mock_render_cls.assert_not_called()  # crucially, NOT the full pipeline
+        assert window._active_separation_job is mock_job
+
+    # Finished slot updates status and clears the active job
+    vocal = tmp_path / "vocal.wav"
+    instrumental = tmp_path / "instrumental.wav"
+    with patch("PySide6.QtWidgets.QMessageBox.information") as mock_info:
+        window.on_separation_finished(vocal, instrumental)
+        mock_info.assert_called_once()
+        assert window._active_separation_job is None
+        assert not window._progress_bar.isVisible()
+
+
+def test_extract_stems_without_track_warns(qtbot):
+    mock_cache = MagicMock()
+    window = MainWindow(cache_manager=mock_cache)
+    qtbot.addWidget(window)
+
+    with patch("app.ui.main_window.SeparationJob") as mock_sep_cls, patch(
+        "PySide6.QtWidgets.QMessageBox.warning"
+    ) as mock_warn:
+        window.on_extract_stems_requested()
+        mock_warn.assert_called_once()
+        mock_sep_cls.assert_not_called()

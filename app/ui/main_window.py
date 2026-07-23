@@ -38,6 +38,7 @@ from app.ui.ab_compare_view import ABCompareView
 from app.ui.instrumental_panel import InstrumentalPanel
 from app.ui.vocal_panel import VocalPanel
 from app.workers.render_job import RenderJob
+from app.workers.separation_job import SeparationJob
 
 logger = get_logger(__name__)
 
@@ -212,6 +213,29 @@ class StemSeparationPanel(QWidget):
             "Outputs: <code>vocal.wav</code>, <code>instrumental.wav</code>"
         )
         self._extract_button.setEnabled(True)
+        self._extract_button.setText("✂️  Extract Stems")
+
+    def set_separating(self, stage: str) -> None:
+        self._stem_status_label.setText(
+            f"<b>{stage}…</b> Separating vocal and instrumental stems "
+            "(this can take a few minutes on CPU)."
+        )
+        self._extract_button.setEnabled(False)
+        self._extract_button.setText("Extracting…")
+
+    def set_separated(self, vocal_path: Path, instrumental_path: Path) -> None:
+        self._stem_status_label.setText(
+            "Stems extracted:<br>"
+            f"&bull; <code>{vocal_path}</code><br>"
+            f"&bull; <code>{instrumental_path}</code>"
+        )
+        self._extract_button.setEnabled(True)
+        self._extract_button.setText("✂️  Re-extract Stems")
+
+    def set_separation_failed(self, error: str) -> None:
+        self._stem_status_label.setText(f"<span style='color:#ff7675;'>Separation failed: {error}</span>")
+        self._extract_button.setEnabled(True)
+        self._extract_button.setText("✂️  Extract Stems")
 
     @Slot()
     def on_extract_clicked(self) -> None:
@@ -230,6 +254,7 @@ class MainWindow(QMainWindow):
         self._current_input_path: Optional[Path] = None
         self._normalized_path: Optional[Path] = None
         self._active_render_job: Optional[RenderJob] = None
+        self._active_separation_job: Optional[SeparationJob] = None
 
         self._init_ui()
         self._apply_global_theme()
@@ -257,7 +282,7 @@ class MainWindow(QMainWindow):
         self._tab_widget.setObjectName("MainTabs")
 
         self._stem_separation_panel = StemSeparationPanel()
-        self._stem_separation_panel.separationRequested.connect(self.on_render_requested)
+        self._stem_separation_panel.separationRequested.connect(self.on_extract_stems_requested)
 
         # Real control panels with full slider/toggle controls
         self._vocal_panel = VocalPanel(cache_manager=self._cache_manager)
@@ -391,6 +416,76 @@ class MainWindow(QMainWindow):
         preset = self._collect_preset()
         self.start_render_job(preset)
 
+    @Slot()
+    def on_extract_stems_requested(self) -> None:
+        """Triggered by the Stem Separation panel's 'Extract Stems' button.
+
+        Runs ONLY ingestion + separation (no neural denoise/master), so users can pull the
+        raw vocal/instrumental stems without waiting on the full CPU render pipeline.
+        """
+        if self._current_input_path is None:
+            QMessageBox.warning(self, "No Track Ingested", "Please select and ingest a track before extracting stems.")
+            return
+
+        if self._active_separation_job is not None and self._active_separation_job.isRunning():
+            logger.warning("SeparationJob is already running")
+            return
+        if self._active_render_job is not None and self._active_render_job.isRunning():
+            QMessageBox.warning(self, "Render In Progress", "A render is already running; please wait for it to finish.")
+            return
+
+        logger.info("Starting SeparationJob for %s", self._current_input_path)
+        job = SeparationJob(
+            input_path=self._current_input_path,
+            cache_manager=self._cache_manager,
+            parent=self,
+        )
+        job.stageChanged.connect(self.on_render_stage_changed)
+        job.progressChanged.connect(self.on_render_progress_changed)
+        job.separationFinished.connect(self.on_separation_finished)
+        job.failed.connect(self.on_separation_failed)
+        job.cancelled.connect(self.on_render_cancelled)
+
+        self._active_separation_job = job
+
+        self._stem_separation_panel.set_separating("Separating")
+        self._status_label.setText("Extracting stems...")
+        self._progress_bar.setValue(0)
+        self._progress_bar.setVisible(True)
+        self._cancel_button.setVisible(True)
+        self._render_button.setEnabled(False)
+
+        job.start()
+
+    @Slot(Path, Path)
+    def on_separation_finished(self, vocal_path: Path, instrumental_path: Path) -> None:
+        logger.info("Stem separation finished: %s, %s", vocal_path, instrumental_path)
+        self._status_label.setText("Stems extracted.")
+        self._progress_bar.setValue(100)
+        self._progress_bar.setVisible(False)
+        self._cancel_button.setVisible(False)
+        self._render_button.setEnabled(True)
+        self._stem_separation_panel.set_separated(vocal_path, instrumental_path)
+        self._active_separation_job = None
+
+        QMessageBox.information(
+            self,
+            "Stems Extracted",
+            f"Vocal and instrumental stems saved to:\n{vocal_path.parent}",
+        )
+
+    @Slot(str)
+    def on_separation_failed(self, error: str) -> None:
+        logger.error("Stem separation failed: %s", error)
+        self._status_label.setText(f"Stem separation failed: {error}")
+        self._progress_bar.setVisible(False)
+        self._cancel_button.setVisible(False)
+        self._render_button.setEnabled(True)
+        self._stem_separation_panel.set_separation_failed(error)
+        self._active_separation_job = None
+
+        QMessageBox.critical(self, "Separation Failed", f"An error occurred during stem separation:\n{error}")
+
     @Slot(Settings)
     def on_vocal_render_requested(self, settings: Settings) -> None:
         """Triggered by the VocalPanel's own 'Apply / Render' button."""
@@ -418,6 +513,9 @@ class MainWindow(QMainWindow):
 
         if self._active_render_job is not None and self._active_render_job.isRunning():
             logger.warning("RenderJob is already running")
+            return
+        if self._active_separation_job is not None and self._active_separation_job.isRunning():
+            QMessageBox.warning(self, "Separation In Progress", "Stem extraction is running; please wait for it to finish.")
             return
 
         logger.info("Starting RenderJob for %s with preset: %s", self._current_input_path, preset)
@@ -490,10 +588,16 @@ class MainWindow(QMainWindow):
         self._progress_bar.setVisible(False)
         self._cancel_button.setVisible(False)
         self._render_button.setEnabled(True)
+        if self._normalized_path is not None:
+            self._stem_separation_panel.set_track_loaded(self._normalized_path)
         self._active_render_job = None
+        self._active_separation_job = None
 
     @Slot()
     def on_cancel_render_clicked(self) -> None:
         if self._active_render_job is not None and self._active_render_job.isRunning():
             self._status_label.setText("Cancelling render...")
             self._active_render_job.cancel()
+        if self._active_separation_job is not None and self._active_separation_job.isRunning():
+            self._status_label.setText("Cancelling separation...")
+            self._active_separation_job.cancel()

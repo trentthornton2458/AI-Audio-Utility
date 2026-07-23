@@ -84,13 +84,45 @@ def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tu
     logger.info("Separating stems for track %s from %s", track_id, normalized_wav_path)
     separator = Separator(output_dir=str(stems_dir), model_file_dir=str(cache_manager.models_dir))
     separator.load_model(model_filename=MODEL_FILENAME)
-    separator.separate(
-        str(normalized_wav_path),
-        custom_output_names={"vocals": VOCAL_STEM_NAME, "instrumental": INSTRUMENTAL_STEM_NAME},
-    )
+    # Let audio-separator write its default-named stems, then rename them to our canonical
+    # vocal.wav/instrumental.wav below. This avoids relying on custom_output_names, whose
+    # chunked-processing code path matches stem-name keys case-sensitively while the model
+    # produces capitalized names ("Vocals"/"Instrumental") — a mismatch that silently
+    # misnames outputs.
+    produced = separator.separate(str(normalized_wav_path))
+    produced_paths = [_resolve_output_path(name, stems_dir) for name in produced]
+
+    _rename_stem(produced_paths, "vocal", vocal_path)
+    _rename_stem(produced_paths, "instrumental", instrumental_path)
 
     if not vocal_path.is_file() or not instrumental_path.is_file():
-        raise RuntimeError(f"Stem separation did not produce expected output files in {stems_dir}")
+        raise RuntimeError(
+            f"Stem separation did not produce expected output files in {stems_dir} "
+            f"(separator returned {produced})"
+        )
 
     logger.info("Separated stems for track %s -> %s, %s", track_id, vocal_path, instrumental_path)
     return vocal_path, instrumental_path
+
+
+def _resolve_output_path(name: str, stems_dir: Path) -> Path:
+    """Resolve a name returned by Separator.separate() (a bare filename or a path) to a Path."""
+    candidate = Path(name)
+    return candidate if candidate.is_absolute() else stems_dir / candidate.name
+
+
+def _rename_stem(produced_paths: list[Path], token: str, target: Path) -> None:
+    """Move the produced stem whose filename identifies it as `token` (e.g. 'vocal') to `target`.
+
+    Matching is case-insensitive and, for 'vocal', excludes 'instrumental' so the substring
+    'instrumental' is never mistaken for a vocal stem. No-ops if nothing matches, leaving the
+    caller's existence check to raise a clear error.
+    """
+    for path in produced_paths:
+        lower = path.name.lower()
+        if token == "vocal" and "instrumental" in lower:
+            continue
+        if token in lower and path.is_file():
+            if path != target:
+                path.replace(target)
+            return
