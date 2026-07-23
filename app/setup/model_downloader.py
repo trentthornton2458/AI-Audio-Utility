@@ -53,25 +53,10 @@ class ModelSpec:
     sha256: str
 
 
-# TODO: Confirm the real distribution URL for this checkpoint (audio-separator's model
-# registry / its Hugging Face mirror) and replace this placeholder before enabling downloads.
-BS_ROFORMER_SPEC = ModelSpec(
-    name="BS-RoFormer",
-    filename=BS_ROFORMER_FILENAME,
-    url="https://TODO-REPLACE-WITH-REAL-BS-ROFORMER-DOWNLOAD-URL/" + BS_ROFORMER_FILENAME,
-    sha256="TODO_REPLACE_WITH_REAL_SHA256_CHECKSUM",  # TODO: real published SHA256, not available yet.
-)
-
-# TODO: Confirm the real distribution URL for resemble-enhance's published weights
-# (e.g. its Hugging Face repo) and replace this placeholder before enabling downloads.
-RESEMBLE_ENHANCE_SPEC = ModelSpec(
-    name="resemble-enhance",
-    filename="resemble_enhance.pth",
-    url="https://TODO-REPLACE-WITH-REAL-RESEMBLE-ENHANCE-DOWNLOAD-URL/resemble_enhance.pth",
-    sha256="TODO_REPLACE_WITH_REAL_SHA256_CHECKSUM",  # TODO: real published SHA256, not available yet.
-)
-
-REQUIRED_MODEL_SPECS: tuple[ModelSpec, ...] = (BS_ROFORMER_SPEC, RESEMBLE_ENHANCE_SPEC)
+# Models are natively auto-downloaded by audio-separator and resemble-enhance on first use,
+# so we no longer manually pre-fetch them here. This avoids duplicating logic and managing
+# their Hugging Face URLs/checksums.
+REQUIRED_MODEL_SPECS: tuple[ModelSpec, ...] = ()
 
 
 class ModelDownloader:

@@ -1,4 +1,4 @@
-"""Tests for app.workers.render_job (RenderJob)."""
+"""Tests for app.workers.render_job (RenderJob), including execution, cancellation, and error signaling."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Ensure missing heavy ML dependencies do not break UI test import collection
 for mod_name in [
     "resemble_enhance",
     "resemble_enhance.enhancer",
@@ -34,9 +33,7 @@ def test_render_job_writes_metadata(tmp_path: Path):
     input_path.touch()
 
     preset = Preset(vocal_clean_intensity=0.9, notch_depth_db=5.0)
-
     job = RenderJob(input_path=input_path, preset=preset, cache_manager=cache_mgr)
-
     dummy_audio = np.zeros((44100, 2), dtype=np.float64)
 
     with patch("app.core.ingestion.load_and_normalize_track", return_value=tmp_path / "cache" / "track123" / "input.wav"), \
@@ -62,3 +59,42 @@ def test_render_job_writes_metadata(tmp_path: Path):
         assert "timestamp" in data
         assert data["preset"]["vocal_clean_intensity"] == 0.9
         assert data["preset"]["notch_depth_db"] == 5.0
+
+
+def test_render_job_cancellation(tmp_path: Path):
+    config = AppConfig(cache_root=tmp_path / "cache")
+    cache_mgr = CacheManager(config=config)
+
+    input_path = tmp_path / "input.wav"
+    input_path.touch()
+
+    preset = Preset()
+    job = RenderJob(input_path=input_path, preset=preset, cache_manager=cache_mgr)
+
+    cancelled_emitted = []
+    job.cancelled.connect(lambda: cancelled_emitted.append(True))
+
+    with patch.object(job, "isInterruptionRequested", return_value=True):
+        job.run()
+
+    assert len(cancelled_emitted) == 1
+
+
+def test_render_job_failure_signal(tmp_path: Path):
+    config = AppConfig(cache_root=tmp_path / "cache")
+    cache_mgr = CacheManager(config=config)
+
+    input_path = tmp_path / "input.wav"
+    input_path.touch()
+
+    preset = Preset()
+    job = RenderJob(input_path=input_path, preset=preset, cache_manager=cache_mgr)
+
+    failed_messages = []
+    job.failed.connect(lambda msg: failed_messages.append(msg))
+
+    with patch("app.core.ingestion.load_and_normalize_track", side_effect=ValueError("Corrupt WAV format")):
+        job.run()
+
+    assert len(failed_messages) == 1
+    assert "Corrupt WAV format" in failed_messages[0]

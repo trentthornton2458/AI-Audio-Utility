@@ -24,11 +24,12 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from app.core.ingestion import UnsupportedAudioFormatError
 from app.models.preset import Preset
 from app.ui.main_window import (
-    ArtifactFixingPanel,
     FileLoadPanel,
     MainWindow,
     StemSeparationPanel,
 )
+from app.ui.vocal_panel import VocalPanel
+from app.ui.instrumental_panel import InstrumentalPanel
 
 
 def test_main_window_structure_and_title(qtbot):
@@ -37,12 +38,14 @@ def test_main_window_structure_and_title(qtbot):
     qtbot.addWidget(window)
 
     assert window.windowTitle() == "Music Mastery Enhancer"
-    assert window._tab_widget.count() == 3
+    assert window._tab_widget.count() == 4
     assert window._tab_widget.tabText(0) == "Stem Separation"
-    assert window._tab_widget.tabText(1) == "Artifact Fixing & Mastering"
-    assert window._tab_widget.tabText(2) == "A/B Compare"
+    assert window._tab_widget.tabText(1) == "Vocal Controls"
+    assert window._tab_widget.tabText(2) == "Instrumental Controls"
+    assert window._tab_widget.tabText(3) == "A/B Compare"
     assert isinstance(window._stem_separation_panel, StemSeparationPanel)
-    assert isinstance(window._artifact_fixing_panel, ArtifactFixingPanel)
+    assert isinstance(window._vocal_panel, VocalPanel)
+    assert isinstance(window._instrumental_panel, InstrumentalPanel)
     assert window._status_label.text() == "Ready. Load a .wav or .mp3 track to begin."
 
 
@@ -132,7 +135,7 @@ def test_main_window_ingestion_success(qtbot, tmp_path):
         assert window._current_input_path == input_path
         assert window._normalized_path == norm_path
         assert "Track ingested and normalized" in window._status_label.text()
-        assert window._artifact_fixing_panel._render_button.isEnabled()
+        assert window._render_button.isEnabled()
 
 
 def test_main_window_ingestion_failure(qtbot, tmp_path):

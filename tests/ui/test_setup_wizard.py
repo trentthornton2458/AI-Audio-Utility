@@ -61,8 +61,17 @@ def test_hardware_check_page_cpu_fallback(qtbot):
 
 def test_model_download_page_progress_and_success(qtbot):
     mock_downloader = MagicMock()
-    page = ModelDownloadPage(downloader=mock_downloader)
-    qtbot.addWidget(page)
+    
+    mock_specs = [
+        MagicMock(name="BS-RoFormer", filename="bs.ckpt"),
+        MagicMock(name="resemble-enhance", filename="re.pth"),
+    ]
+    mock_specs[0].name = "BS-RoFormer"
+    mock_specs[1].name = "resemble-enhance"
+    
+    with patch("app.ui.setup_wizard.REQUIRED_MODEL_SPECS", mock_specs):
+        page = ModelDownloadPage(downloader=mock_downloader)
+        qtbot.addWidget(page)
 
     assert not page.isComplete()
 
@@ -85,8 +94,17 @@ def test_model_download_page_progress_and_success(qtbot):
 
 def test_model_download_page_failure_and_retry(qtbot):
     mock_downloader = MagicMock()
-    page = ModelDownloadPage(downloader=mock_downloader)
-    qtbot.addWidget(page)
+    
+    mock_specs = [
+        MagicMock(name="BS-RoFormer", filename="bs.ckpt"),
+        MagicMock(name="resemble-enhance", filename="re.pth"),
+    ]
+    mock_specs[0].name = "BS-RoFormer"
+    mock_specs[1].name = "resemble-enhance"
+    
+    with patch("app.ui.setup_wizard.REQUIRED_MODEL_SPECS", mock_specs):
+        page = ModelDownloadPage(downloader=mock_downloader)
+        qtbot.addWidget(page)
 
     with patch.object(page, "on_start_download") as mock_start:
         page.on_download_failed("Checksum mismatch for BS-RoFormer", retryable=True)

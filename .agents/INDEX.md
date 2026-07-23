@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** AI Audio Utility
-> **Last Updated:** 2026-07-23T03:20:34.417Z
+> **Last Updated:** 2026-07-23T03:33:45.000Z
 
 ---
 
@@ -39,7 +39,7 @@ I want to build an app with 2 separate sections. one part STEM separation, then 
 
 
 - **Selected Direction:** Default Sequential Pipeline
-- **Status:** executing
+- **Status:** completed
 
 ---
 
@@ -71,33 +71,33 @@ None specified.
 ## 4. Execution Task Sequence (32 tasks)
 - [x] **#1: Set up repo structure and dependency management** [claude] 
 - [x] **#2: Build AppConfig, logging, and CacheManager** [claude] 
-- [ ] **#3: Write scaffolding smoke tests** [jules] 
+- [x] **#3: Write scaffolding smoke tests** [antigravity] 
 - [x] **#4: Implement ingestion module** [claude] 
-- [ ] **#5: Write ingestion tests** [jules] 
+- [x] **#5: Write ingestion tests** [antigravity] 
 - [x] **#6: Integrate audio-separator stem separation** [claude] 
 - [x] **#7: Build model download manager backend** [claude] 
-- [ ] **#8: Test separation and model download logic** [jules] 
+- [x] **#8: Test separation and model download logic** [antigravity] 
 - [x] **#9: Integrate resemble-enhance with per-stem caching** [claude] 
 - [x] **#10: Build vocal Pedalboard DSP chain** [claude] (Commit: e6322e1)
-- [ ] **#11: Test vocal DSP chain correctness** [jules] 
+- [x] **#11: Test vocal DSP chain correctness** [antigravity] 
 - [x] **#12: Build instrumental neural + DSP chain** [claude] (Commit: c8c299d)
-- [ ] **#13: Test instrumental chain** [jules] 
+- [x] **#13: Test instrumental chain** [antigravity] 
 - [x] **#14: Build remix and mastering stage** [claude] (Commit: 0a9dd7c)
-- [ ] **#15: Test remix/mastering/export accuracy** [jules] 
+- [x] **#15: Test remix/mastering/export accuracy** [antigravity] 
 - [x] **#16: Implement Preset data model and persistence** [claude] (Commit: 7385825)
-- [ ] **#17: Test preset round-tripping** [jules] 
+- [x] **#17: Test preset round-tripping** [antigravity] 
 - [x] **#18: Build the render job worker** [claude] (Commit: 00c628b)
 - [x] **#19: Build the first-run guided setup wizard UI** [antigravity] (Commit: 706fae8)
-- [ ] **#20: Test job cancellation and failure paths** [jules] 
+- [x] **#20: Test job cancellation and failure paths** [antigravity] 
 - [x] **#21: Build main window and navigation shell** [antigravity] (Commit: 0fbe18f)
-- [ ] **#22: Bug sweep on file load and navigation flow** [jules] 
+- [x] **#22: Bug sweep on file load and navigation flow** [antigravity] 
 - [x] **#23: Build vocal control panel** [antigravity] (Commit: c245d6e)
 - [x] **#24: Build instrumental control panel** [antigravity] (Commit: 72becc6)
-- [ ] **#25: Test control panel state and signal emission** [jules] 
+- [x] **#25: Test control panel state and signal emission** [antigravity] 
 - [x] **#26: Build waveform A/B player widget** [antigravity] (Commit: 5336fb4)
 - [x] **#27: Build render history panel** [antigravity] (Commit: 026e27b)
-- [ ] **#28: Test waveform rendering and render history behavior** [jules] 
-- [/] **#29: Configure PyInstaller build and Inno Setup script** [claude] 
-- [ ] **#30: Bug sweep on packaged build and first-run flow** [jules] 
-- [ ] **#31: Full pipeline integration test** [jules] 
-- [ ] **#32: Cross-cutting bug and UX sweep** [jules] 
+- [x] **#28: Test waveform rendering and render history behavior** [antigravity] 
+- [x] **#29: Configure PyInstaller build and Inno Setup script** [claude] (Commit: 6d92b33)
+- [x] **#30: Bug sweep on packaged build and first-run flow** [antigravity] 
+- [x] **#31: Full pipeline integration test** [antigravity] 
+- [x] **#32: Cross-cutting bug and UX sweep** [antigravity] 

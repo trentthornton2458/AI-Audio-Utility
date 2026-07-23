@@ -4,15 +4,33 @@ instrumental chains (caching by settings hash, per-channel processing, dry/wet b
 from __future__ import annotations
 
 import hashlib
+import sys
+import types
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 import torch
-from resemble_enhance.enhancer.inference import denoise, enhance
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
+
+
+def _lazy_import_resemble_enhance():
+    """Import resemble_enhance's denoise/enhance functions, shimming out deepspeed first.
+
+    resemble_enhance's train module does `from deepspeed import DeepSpeedConfig` at import
+    time, but deepspeed cannot be built on Windows and is only used for training, not
+    inference.  We inject a lightweight stub module so the import chain succeeds.
+    """
+    if "deepspeed" not in sys.modules:
+        ds_stub = types.ModuleType("deepspeed")
+        ds_stub.DeepSpeedConfig = type("DeepSpeedConfig", (), {})  # type: ignore[attr-defined]
+        sys.modules["deepspeed"] = ds_stub
+
+    from resemble_enhance.enhancer.inference import denoise, enhance  # noqa: F811
+
+    return denoise, enhance
 
 logger = get_logger(__name__)
 
@@ -117,6 +135,8 @@ def _process_channel(
     enhance_intensity: float,
 ) -> tuple[np.ndarray, int]:
     """Run the enabled neural stages on a single audio channel, returning (samples, samplerate)."""
+    denoise, enhance = _lazy_import_resemble_enhance()
+
     current = torch.from_numpy(channel).float()
     current_sr = samplerate
 

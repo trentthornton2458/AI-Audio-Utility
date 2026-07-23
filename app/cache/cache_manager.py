@@ -25,6 +25,7 @@ class CacheManager:
     PRESETS_DIRNAME = "presets"
     LOGS_DIRNAME = "logs"
     MODELS_DIRNAME = "models"
+    BIN_DIRNAME = "bin"
 
     def __init__(self, config: Optional[AppConfig] = None) -> None:
         self._config = config or get_app_config()
@@ -32,10 +33,16 @@ class CacheManager:
         self._presets_dir = self._root / self.PRESETS_DIRNAME
         self._logs_dir = self._root / self.LOGS_DIRNAME
         self._models_dir = self._root / self.MODELS_DIRNAME
+        self._bin_dir = self._root / self.BIN_DIRNAME
         self._ensure_dir(self._root)
         self._ensure_dir(self._presets_dir)
         self._ensure_dir(self._logs_dir)
         self._ensure_dir(self._models_dir)
+        self._ensure_dir(self._bin_dir)
+
+    @property
+    def bin_dir(self) -> Path:
+        return self._bin_dir
 
     @property
     def root(self) -> Path:

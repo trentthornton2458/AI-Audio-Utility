@@ -2,7 +2,7 @@
 
 Provides the primary user interface including:
 - File ingestion panel with drag-and-drop support and file picker (.wav / .mp3)
-- Tabbed navigation for 'Stem Separation' and 'Artifact Fixing & Mastering'
+- Tabbed navigation for 'Stem Separation', 'Vocal Controls', 'Instrumental Controls', and 'A/B Compare'
 - Integrated status bar displaying RenderJob stage and progress
 """
 
@@ -33,7 +33,10 @@ from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
 from app.core.ingestion import UnsupportedAudioFormatError, load_and_normalize_track
 from app.models.preset import Preset
+from app.models.settings import Settings
 from app.ui.ab_compare_view import ABCompareView
+from app.ui.instrumental_panel import InstrumentalPanel
+from app.ui.vocal_panel import VocalPanel
 from app.workers.render_job import RenderJob
 
 logger = get_logger(__name__)
@@ -154,7 +157,9 @@ class FileLoadPanel(QFrame):
 
 
 class StemSeparationPanel(QWidget):
-    """Panel view for stem separation settings and status."""
+    """Panel view for stem separation settings, actions, and status."""
+
+    separationRequested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -176,7 +181,7 @@ class StemSeparationPanel(QWidget):
         layout.addWidget(desc)
 
         card = QFrame()
-        card.setStyleSheet("QFrame { background-color: #21232e; border-radius: 8px; padding: 12px; }")
+        card.setStyleSheet("QFrame { background-color: #21232e; border-radius: 8px; padding: 16px; }")
         card_layout = QVBoxLayout(card)
 
         self._model_label = QLabel("<b>Separation Model:</b> BS-RoFormer (model_bs_roformer_ep_317_sdr_12.9755.ckpt)")
@@ -186,6 +191,18 @@ class StemSeparationPanel(QWidget):
         self._stem_status_label.setWordWrap(True)
         card_layout.addWidget(self._stem_status_label)
 
+        # Explicit Extract Stems action button
+        self._extract_button = QPushButton("✂️  Extract Stems")
+        self._extract_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._extract_button.setStyleSheet(
+            "QPushButton { background-color: #6c5ce7; color: white; font-weight: bold; font-size: 14px; padding: 10px 20px; border-radius: 6px; margin-top: 10px; }"
+            "QPushButton:hover { background-color: #7d6dfa; }"
+            "QPushButton:disabled { background-color: #4a4b57; color: #8a8d9b; }"
+        )
+        self._extract_button.setEnabled(False)
+        self._extract_button.clicked.connect(self.on_extract_clicked)
+        card_layout.addWidget(self._extract_button)
+
         layout.addWidget(card)
         layout.addStretch()
 
@@ -194,68 +211,11 @@ class StemSeparationPanel(QWidget):
             f"Ready to separate track: <b>{normalized_path.name}</b><br>"
             "Outputs: <code>vocal.wav</code>, <code>instrumental.wav</code>"
         )
-
-
-class ArtifactFixingPanel(QWidget):
-    """Panel view for neural cleaning, DSP enhancement, and mastering controls."""
-
-    renderRequested = Signal()
-
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self._init_ui()
-
-    def _init_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(16)
-
-        title = QLabel("<h2>Artifact Fixing & Mastering</h2>")
-        layout.addWidget(title)
-
-        desc = QLabel(
-            "Configure vocal/instrumental neural denoise intensity, 4kHz notch filter depth, "
-            "de-essing, and final LUFS mastering target."
-        )
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
-
-        # Placeholder card for controls (Milestone 10 will build detailed slider/toggle controls)
-        card = QFrame()
-        card.setStyleSheet("QFrame { background-color: #21232e; border-radius: 8px; padding: 16px; }")
-        card_layout = QVBoxLayout(card)
-
-        info = QLabel(
-            "<b>Pipeline Controls</b><br>"
-            "• Resemble-Enhance Neural Denoise & Harmonic Reconstruction<br>"
-            "• Pedalboard DSP (80Hz HPF, 14.5kHz LPF, 4kHz Notch, De-Esser)<br>"
-            "• LUFS Normalization & True-Peak Limiter (-14.0 LUFS Target)"
-        )
-        info.setWordWrap(True)
-        card_layout.addWidget(info)
-
-        layout.addWidget(card)
-
-        self._render_button = QPushButton("Render & Master Track")
-        self._render_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._render_button.setStyleSheet(
-            "QPushButton { background-color: #00b894; color: white; font-weight: bold; font-size: 14px; padding: 10px; border-radius: 6px; }"
-            "QPushButton:hover { background-color: #00cec9; }"
-            "QPushButton:disabled { background-color: #4a4b57; color: #8a8d9b; }"
-        )
-        self._render_button.setEnabled(False)
-        self._render_button.clicked.connect(self.on_render_clicked)
-        layout.addWidget(self._render_button)
-
-        layout.addStretch()
+        self._extract_button.setEnabled(True)
 
     @Slot()
-    def on_render_clicked(self) -> None:
-        # TODO: Gather settings from Milestone 10 vocal/instrumental control panels
-        self.renderRequested.emit()
-
-    def set_render_enabled(self, enabled: bool) -> None:
-        self._render_button.setEnabled(enabled)
+    def on_extract_clicked(self) -> None:
+        self.separationRequested.emit()
 
 
 class MainWindow(QMainWindow):
@@ -297,14 +257,40 @@ class MainWindow(QMainWindow):
         self._tab_widget.setObjectName("MainTabs")
 
         self._stem_separation_panel = StemSeparationPanel()
-        self._artifact_fixing_panel = ArtifactFixingPanel()
-        self._artifact_fixing_panel.renderRequested.connect(self.on_render_requested)
+        self._stem_separation_panel.separationRequested.connect(self.on_render_requested)
+
+        # Real control panels with full slider/toggle controls
+        self._vocal_panel = VocalPanel(cache_manager=self._cache_manager)
+        self._vocal_panel.renderRequested.connect(self.on_vocal_render_requested)
+
+        self._instrumental_panel = InstrumentalPanel(cache_manager=self._cache_manager)
+        self._instrumental_panel.renderRequested.connect(self.on_instrumental_render_requested)
+
         self._ab_compare_view = ABCompareView(cache_manager=self._cache_manager)
 
         self._tab_widget.addTab(self._stem_separation_panel, "Stem Separation")
-        self._tab_widget.addTab(self._artifact_fixing_panel, "Artifact Fixing & Mastering")
+        self._tab_widget.addTab(self._vocal_panel, "Vocal Controls")
+        self._tab_widget.addTab(self._instrumental_panel, "Instrumental Controls")
         self._tab_widget.addTab(self._ab_compare_view, "A/B Compare")
+
         main_layout.addWidget(self._tab_widget)
+
+        # Master render button (uses settings from both panels)
+        render_bar = QHBoxLayout()
+        render_bar.setContentsMargins(0, 0, 0, 0)
+
+        self._render_button = QPushButton("⚡  Render & Master Track")
+        self._render_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._render_button.setStyleSheet(
+            "QPushButton { background-color: #00b894; color: white; font-weight: bold; font-size: 14px; padding: 10px 20px; border-radius: 6px; }"
+            "QPushButton:hover { background-color: #00cec9; }"
+            "QPushButton:disabled { background-color: #4a4b57; color: #8a8d9b; }"
+        )
+        self._render_button.setEnabled(False)
+        self._render_button.clicked.connect(self.on_render_requested)
+        render_bar.addWidget(self._render_button)
+
+        main_layout.addLayout(render_bar)
 
         # Status bar setup
         self._status_bar = QStatusBar()
@@ -339,6 +325,33 @@ class MainWindow(QMainWindow):
             "QProgressBar::chunk { background-color: #6c5ce7; border-radius: 3px; }"
         )
 
+    def _collect_preset(self) -> Preset:
+        """Merge vocal and instrumental panel settings into a single Preset for the render job."""
+        vocal_settings = self._vocal_panel.get_settings()
+        instrumental_settings = self._instrumental_panel.get_settings()
+
+        return Preset(
+            # Vocal settings from VocalPanel
+            vocal_denoise_enabled=vocal_settings.vocal_denoise_enabled,
+            vocal_denoise_intensity=vocal_settings.vocal_denoise_intensity,
+            vocal_enhance_enabled=vocal_settings.vocal_enhance_enabled,
+            vocal_enhance_intensity=vocal_settings.vocal_enhance_intensity,
+            vocal_clean_intensity=vocal_settings.vocal_clean_intensity,
+            vocal_gain_db=vocal_settings.vocal_gain_db,
+            notch_depth_db=vocal_settings.notch_depth_db,
+            # Instrumental settings from InstrumentalPanel
+            instrumental_denoise_enabled=instrumental_settings.instrumental_denoise_enabled,
+            instrumental_denoise_intensity=instrumental_settings.instrumental_denoise_intensity,
+            instrumental_enhance_enabled=instrumental_settings.instrumental_enhance_enabled,
+            instrumental_enhance_intensity=instrumental_settings.instrumental_enhance_intensity,
+            instrumental_mud_cut_hz=instrumental_settings.instrumental_mud_cut_hz,
+            instrumental_dehiss_shelf_hz=instrumental_settings.instrumental_dehiss_shelf_hz,
+            instrumental_dehiss_gain_db=instrumental_settings.instrumental_dehiss_gain_db,
+            instrumental_gain_db=instrumental_settings.instrumental_gain_db,
+            # Mastering (from vocal panel's LUFS target or defaults)
+            lufs_target=vocal_settings.lufs_target,
+        )
+
     @Slot(Path)
     def on_file_selected(self, input_path: Path) -> None:
         logger.info("File selected for ingestion: %s", input_path)
@@ -361,7 +374,7 @@ class MainWindow(QMainWindow):
 
             self._file_load_panel.set_track_info(input_path, normalized_path)
             self._stem_separation_panel.set_track_loaded(normalized_path)
-            self._artifact_fixing_panel.set_render_enabled(True)
+            self._render_button.setEnabled(True)
             self._ab_compare_view.load_original(normalized_path)
             self._ab_compare_view.set_track_id(normalized_path.parent.name)
 
@@ -370,12 +383,32 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def on_render_requested(self) -> None:
+        """Triggered by the main 'Render & Master Track' button — collects from both panels."""
         if self._current_input_path is None:
             QMessageBox.warning(self, "No Track Ingested", "Please select and ingest a track before rendering.")
             return
 
-        # TODO: Wire full Preset values from control panels built in Milestone 10
-        preset = Preset()
+        preset = self._collect_preset()
+        self.start_render_job(preset)
+
+    @Slot(Settings)
+    def on_vocal_render_requested(self, settings: Settings) -> None:
+        """Triggered by the VocalPanel's own 'Apply / Render' button."""
+        if self._current_input_path is None:
+            QMessageBox.warning(self, "No Track Ingested", "Please select and ingest a track before rendering.")
+            return
+
+        preset = self._collect_preset()
+        self.start_render_job(preset)
+
+    @Slot(Settings)
+    def on_instrumental_render_requested(self, settings: Settings) -> None:
+        """Triggered by the InstrumentalPanel's own 'Apply / Render' button."""
+        if self._current_input_path is None:
+            QMessageBox.warning(self, "No Track Ingested", "Please select and ingest a track before rendering.")
+            return
+
+        preset = self._collect_preset()
         self.start_render_job(preset)
 
     def start_render_job(self, preset: Preset, output_path: Optional[Path] = None) -> None:
@@ -387,7 +420,7 @@ class MainWindow(QMainWindow):
             logger.warning("RenderJob is already running")
             return
 
-        logger.info("Starting RenderJob for %s", self._current_input_path)
+        logger.info("Starting RenderJob for %s with preset: %s", self._current_input_path, preset)
         job = RenderJob(
             input_path=self._current_input_path,
             preset=preset,
@@ -408,7 +441,7 @@ class MainWindow(QMainWindow):
         self._progress_bar.setValue(0)
         self._progress_bar.setVisible(True)
         self._cancel_button.setVisible(True)
-        self._artifact_fixing_panel.set_render_enabled(False)
+        self._render_button.setEnabled(False)
 
         job.start()
 
@@ -428,7 +461,7 @@ class MainWindow(QMainWindow):
         self._progress_bar.setValue(100)
         self._progress_bar.setVisible(False)
         self._cancel_button.setVisible(False)
-        self._artifact_fixing_panel.set_render_enabled(True)
+        self._render_button.setEnabled(True)
         self._ab_compare_view.load_cleaned(output_path)
         self._ab_compare_view.refresh_history()
         self._active_render_job = None
@@ -445,7 +478,7 @@ class MainWindow(QMainWindow):
         self._status_label.setText(f"Render failed: {error}")
         self._progress_bar.setVisible(False)
         self._cancel_button.setVisible(False)
-        self._artifact_fixing_panel.set_render_enabled(True)
+        self._render_button.setEnabled(True)
         self._active_render_job = None
 
         QMessageBox.critical(self, "Render Failed", f"An error occurred during rendering:\n{error}")
@@ -456,7 +489,7 @@ class MainWindow(QMainWindow):
         self._status_label.setText("Render cancelled.")
         self._progress_bar.setVisible(False)
         self._cancel_button.setVisible(False)
-        self._artifact_fixing_panel.set_render_enabled(True)
+        self._render_button.setEnabled(True)
         self._active_render_job = None
 
     @Slot()

@@ -256,6 +256,14 @@ class ModelDownloadPage(QWizardPage):
         self._error_frame.setVisible(False)
         layout.addWidget(self._error_frame)
 
+        # Skip button container
+        skip_layout = QHBoxLayout()
+        skip_layout.addStretch()
+        self._skip_button = QPushButton("Skip Download")
+        self._skip_button.clicked.connect(self.on_skip_clicked)
+        skip_layout.addWidget(self._skip_button)
+        layout.addLayout(skip_layout)
+
         layout.addStretch()
 
     def isComplete(self) -> bool:
@@ -304,7 +312,7 @@ class ModelDownloadPage(QWizardPage):
             self._model_progress_bars[model_name].setValue(int(clamped_fraction * 100))
 
         # Update overall progress as average of model fractions
-        total_specs = len(REQUIRED_MODEL_SPECS)
+        total_specs = len(self._model_progress_bars)
         if total_specs > 0:
             avg_fraction = sum(self._model_fractions.values()) / total_specs
             self._overall_progress_bar.setValue(int(avg_fraction * 100))
@@ -343,6 +351,26 @@ class ModelDownloadPage(QWizardPage):
         """Slot handling click on Retry button."""
         logger.info("ModelDownloadPage: Retry clicked by user.")
         self.on_start_download()
+
+    @Slot()
+    def on_skip_clicked(self) -> None:
+        """Slot handling click on Skip Download button."""
+        logger.info("ModelDownloadPage: Skip clicked by user.")
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.quit()
+            self._worker.wait()
+        
+        for pbar in self._model_progress_bars.values():
+            pbar.setValue(100)
+        self._overall_progress_bar.setValue(100)
+
+        self._status_label.setText("Model download skipped. Models will be downloaded on first use.")
+        self._status_label.setStyleSheet("color: #f57f17; font-weight: bold;")
+        self._error_frame.setVisible(False)
+        self._skip_button.setEnabled(False)
+
+        self._is_complete = True
+        self.completeChanged.emit()
 
 
 class CompletionPage(QWizardPage):
