@@ -139,6 +139,7 @@ class WaveformCanvas(QWidget):
         super().__init__(parent)
         self.setMouseTracking(True)
         self.setMinimumHeight(100)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         self._waveform_data: Optional[WaveformData] = None
         self._playhead_position_ms: int = 0
@@ -166,6 +167,12 @@ class WaveformCanvas(QWidget):
 
         # Canvas Background
         painter.fillRect(0, 0, width, height, QColor("#161722"))
+
+        # Draw a distinct focus outline when focused
+        if self.hasFocus():
+            focus_pen = QPen(QColor("#6c5ce7"), 2)
+            painter.setPen(focus_pen)
+            painter.drawRect(1, 1, width - 2, height - 2)
 
         if self._waveform_data is None or self._waveform_data.total_samples == 0:
             painter.setPen(QPen(QColor("#5a5d72")))
@@ -271,6 +278,34 @@ class WaveformCanvas(QWidget):
             seek_ms = int(ratio * duration_ms)
             self.seekRequested.emit(seek_ms)
 
+    def keyPressEvent(self, event) -> None:
+        duration_ms = self._duration_ms
+        if self._waveform_data and duration_ms == 0:
+            duration_ms = int(self._waveform_data.duration_seconds * 1000)
+
+        if duration_ms <= 0:
+            super().keyPressEvent(event)
+            return
+
+        if event.key() == Qt.Key.Key_Left:
+            new_pos = max(0, self._playhead_position_ms - 5000)
+            self.seekRequested.emit(new_pos)
+            event.accept()
+        elif event.key() == Qt.Key.Key_Right:
+            new_pos = min(duration_ms, self._playhead_position_ms + 5000)
+            self.seekRequested.emit(new_pos)
+            event.accept()
+        elif event.key() == Qt.Key.Key_PageUp:
+            new_pos = max(0, self._playhead_position_ms - 15000)
+            self.seekRequested.emit(new_pos)
+            event.accept()
+        elif event.key() == Qt.Key.Key_PageDown:
+            new_pos = min(duration_ms, self._playhead_position_ms + 15000)
+            self.seekRequested.emit(new_pos)
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
 
 class WaveformPlayerWidget(QWidget):
     """Audio waveform player widget supporting scrubbing, click-to-seek, and QMediaPlayer controls."""
@@ -333,6 +368,15 @@ class WaveformPlayerWidget(QWidget):
         # Canvas
         self._canvas = WaveformCanvas()
         self._canvas.seekRequested.connect(self.on_canvas_seek_requested)
+        self._canvas.setToolTip(
+            "Interactive Waveform Display\n"
+            "• Click/drag to seek\n"
+            "• When focused, use Left/Right arrow keys (5s) or PageUp/PageDown (15s)"
+        )
+        self._canvas.setAccessibleName(f"{self._title} Waveform Display")
+        self._canvas.setAccessibleDescription(
+            "Displays the visual peaks and RMS values of the audio. Click/drag or use keyboard to seek playback."
+        )
         card_layout.addWidget(self._canvas)
 
         # Controls bar
@@ -342,6 +386,9 @@ class WaveformPlayerWidget(QWidget):
         self._play_button = QPushButton("Play")
         self._play_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._play_button.setEnabled(False)
+        self._play_button.setToolTip("Play or pause playback (Space)")
+        self._play_button.setAccessibleName("Play")
+        self._play_button.setAccessibleDescription("Starts or pauses playback of the audio track.")
         self._play_button.setStyleSheet(
             "QPushButton { background-color: #6c5ce7; color: white; font-weight: bold; border-radius: 4px; padding: 6px 14px; border: none; }"
             "QPushButton:hover { background-color: #7d6dfa; }"
@@ -353,6 +400,9 @@ class WaveformPlayerWidget(QWidget):
         self._stop_button = QPushButton("Stop")
         self._stop_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._stop_button.setEnabled(False)
+        self._stop_button.setToolTip("Stop playback and reset to beginning")
+        self._stop_button.setAccessibleName("Stop")
+        self._stop_button.setAccessibleDescription("Stops audio playback and returns the playhead to the beginning.")
         self._stop_button.setStyleSheet(
             "QPushButton { background-color: #3b3e54; color: white; font-weight: bold; border-radius: 4px; padding: 6px 12px; border: none; }"
             "QPushButton:hover { background-color: #4b4e69; }"
@@ -371,6 +421,9 @@ class WaveformPlayerWidget(QWidget):
         self._volume_slider.setRange(0, 100)
         self._volume_slider.setValue(100)
         self._volume_slider.setFixedWidth(80)
+        self._volume_slider.setToolTip("Adjust playback volume")
+        self._volume_slider.setAccessibleName("Volume")
+        self._volume_slider.setAccessibleDescription("Controls the audio playback volume level.")
         self._volume_slider.setStyleSheet(
             "QSlider::groove:horizontal { border: 1px solid #2d2f3d; height: 4px; background: #1a1b24; border-radius: 2px; }"
             "QSlider::sub-page:horizontal { background: #55efc4; border-radius: 2px; }"
@@ -502,12 +555,16 @@ class WaveformPlayerWidget(QWidget):
     def on_media_playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
         if state == QMediaPlayer.PlaybackState.PlayingState:
             self._play_button.setText("Pause")
+            self._play_button.setToolTip("Pause playback (Space)")
+            self._play_button.setAccessibleName("Pause")
             self._play_button.setStyleSheet(
                 "QPushButton { background-color: #ff7675; color: white; font-weight: bold; border-radius: 4px; padding: 6px 14px; border: none; }"
                 "QPushButton:hover { background-color: #ff6b6b; }"
             )
         else:
             self._play_button.setText("Play")
+            self._play_button.setToolTip("Play playback (Space)")
+            self._play_button.setAccessibleName("Play")
             self._play_button.setStyleSheet(
                 "QPushButton { background-color: #6c5ce7; color: white; font-weight: bold; border-radius: 4px; padding: 6px 14px; border: none; }"
                 "QPushButton:hover { background-color: #7d6dfa; }"
