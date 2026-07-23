@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 import shutil
 import imageio_ffmpeg
+import soundfile as sf
 import torch
 from audio_separator.separator import Separator
 
@@ -62,6 +63,18 @@ def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tu
     folder, as written by app.core.ingestion). If both cached files already exist,
     separation is skipped and their paths are returned directly.
     """
+    if not normalized_wav_path.is_file():
+        raise ValueError(f"Input file does not exist: {normalized_wav_path}")
+
+    try:
+        info = sf.info(str(normalized_wav_path))
+        if info.frames <= 0:
+            raise ValueError(f"Input file contains no audio frames: {normalized_wav_path}")
+    except Exception as exc:
+        if isinstance(exc, ValueError):
+            raise
+        raise ValueError(f"Input file is corrupt or invalid WAV: {exc}") from exc
+
     track_id = normalized_wav_path.parent.name
     stems_dir = cache_manager.stems_dir(track_id)
     vocal_path = stems_dir / VOCAL_FILENAME
@@ -82,14 +95,50 @@ def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tu
         )
 
     logger.info("Separating stems for track %s from %s", track_id, normalized_wav_path)
-    separator = Separator(output_dir=str(stems_dir), model_file_dir=str(cache_manager.models_dir))
-    separator.load_model(model_filename=MODEL_FILENAME)
-    # Let audio-separator write its default-named stems, then rename them to our canonical
-    # vocal.wav/instrumental.wav below. This avoids relying on custom_output_names, whose
-    # chunked-processing code path matches stem-name keys case-sensitively while the model
-    # produces capitalized names ("Vocals"/"Instrumental") — a mismatch that silently
-    # misnames outputs.
-    produced = separator.separate(str(normalized_wav_path))
+
+    try:
+        try:
+            separator = Separator(output_dir=str(stems_dir), model_file_dir=str(cache_manager.models_dir))
+            separator.load_model(model_filename=MODEL_FILENAME)
+            # Let audio-separator write its default-named stems, then rename them to our canonical
+            # vocal.wav/instrumental.wav below. This avoids relying on custom_output_names, whose
+            # chunked-processing code path matches stem-name keys case-sensitively while the model
+            # produces capitalized names ("Vocals"/"Instrumental") — a mismatch that silently
+            # misnames outputs.
+            produced = separator.separate(str(normalized_wav_path))
+        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
+            is_oom = isinstance(exc, torch.cuda.OutOfMemoryError) or "out of memory" in str(exc).lower()
+            if not is_oom:
+                raise
+
+            logger.warning(
+                "CUDA out of memory during stem separation for track %s; falling back to CPU separation",
+                track_id,
+            )
+            torch.cuda.empty_cache()
+
+            # Temporarily force CPU mode by disabling CUDA and MPS
+            original_cuda_is_available = torch.cuda.is_available
+            torch.cuda.is_available = lambda: False
+            original_mps_is_available = None
+            if hasattr(torch.backends, "mps"):
+                original_mps_is_available = torch.backends.mps.is_available
+                torch.backends.mps.is_available = lambda: False
+
+            try:
+                logger.info("Retrying separation on CPU for track %s", track_id)
+                cpu_separator = Separator(output_dir=str(stems_dir), model_file_dir=str(cache_manager.models_dir))
+                cpu_separator.load_model(model_filename=MODEL_FILENAME)
+                produced = cpu_separator.separate(str(normalized_wav_path))
+            finally:
+                torch.cuda.is_available = original_cuda_is_available
+                if original_mps_is_available is not None:
+                    torch.backends.mps.is_available = original_mps_is_available
+    finally:
+        if torch.cuda.is_available():
+            logger.info("Explicitly freeing PyTorch CUDA memory cache after separation.")
+            torch.cuda.empty_cache()
+
     produced_paths = [_resolve_output_path(name, stems_dir) for name in produced]
 
     _rename_stem(produced_paths, "vocal", vocal_path)
