@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** AI Audio Utility
-> **Last Updated:** 2026-07-23T03:00:28.582Z
+> **Last Updated:** 2026-07-23T03:01:49.353Z
 
 ---
 
@@ -84,9 +84,9 @@ None specified.
 - [ ] **#13: Test instrumental chain** [jules] 
 - [x] **#14: Build remix and mastering stage** [claude] (Commit: 0a9dd7c)
 - [ ] **#15: Test remix/mastering/export accuracy** [jules] 
-- [/] **#16: Implement Preset data model and persistence** [claude] 
+- [x] **#16: Implement Preset data model and persistence** [claude] (Commit: 7385825)
 - [ ] **#17: Test preset round-tripping** [jules] 
-- [ ] **#18: Build the render job worker** [claude] 
+- [/] **#18: Build the render job worker** [claude] 
 - [ ] **#19: Build the first-run guided setup wizard UI** [antigravity] 
 - [ ] **#20: Test job cancellation and failure paths** [jules] 
 - [ ] **#21: Build main window and navigation shell** [antigravity] 
