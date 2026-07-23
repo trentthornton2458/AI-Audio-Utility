@@ -15,19 +15,47 @@ import torch
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
+from app.core.platform_compat import resemble_enhance_compat_shims
 
 
 def _lazy_import_resemble_enhance():
     """Import resemble_enhance's denoise/enhance functions, shimming out deepspeed first.
 
-    resemble_enhance's train module does `from deepspeed import DeepSpeedConfig` at import
-    time, but deepspeed cannot be built on Windows and is only used for training, not
-    inference.  We inject a lightweight stub module so the import chain succeeds.
+    resemble_enhance's inference import chain (enhancer/train.py, utils/distributed.py,
+    utils/engine.py) references `deepspeed.DeepSpeedConfig`, `deepspeed.accelerator.get_accelerator`,
+    `deepspeed.runtime.engine.DeepSpeedEngine`, and `deepspeed.runtime.utils.clip_grad_norm_` at
+    *module import time* (inside training-only functions, but the `from ... import ...` statements
+    themselves execute on import regardless). deepspeed cannot be built on Windows (its setup.py
+    needs libaio, a Linux-only library, and symlink creation that Windows blocks without Developer
+    Mode) and none of these training code paths are reachable from the denoise/enhance inference
+    functions we actually call, so we inject lightweight stub modules for all four instead of
+    installing real deepspeed.
     """
     if "deepspeed" not in sys.modules:
         ds_stub = types.ModuleType("deepspeed")
         ds_stub.DeepSpeedConfig = type("DeepSpeedConfig", (), {})  # type: ignore[attr-defined]
+
+        accelerator_stub = types.ModuleType("deepspeed.accelerator")
+        accelerator_stub.get_accelerator = lambda: None  # type: ignore[attr-defined]
+
+        runtime_stub = types.ModuleType("deepspeed.runtime")
+
+        runtime_engine_stub = types.ModuleType("deepspeed.runtime.engine")
+        runtime_engine_stub.DeepSpeedEngine = type("DeepSpeedEngine", (), {})  # type: ignore[attr-defined]
+
+        runtime_utils_stub = types.ModuleType("deepspeed.runtime.utils")
+        runtime_utils_stub.clip_grad_norm_ = lambda *args, **kwargs: None  # type: ignore[attr-defined]
+
+        ds_stub.accelerator = accelerator_stub  # type: ignore[attr-defined]
+        ds_stub.runtime = runtime_stub  # type: ignore[attr-defined]
+        runtime_stub.engine = runtime_engine_stub  # type: ignore[attr-defined]
+        runtime_stub.utils = runtime_utils_stub  # type: ignore[attr-defined]
+
         sys.modules["deepspeed"] = ds_stub
+        sys.modules["deepspeed.accelerator"] = accelerator_stub
+        sys.modules["deepspeed.runtime"] = runtime_stub
+        sys.modules["deepspeed.runtime.engine"] = runtime_engine_stub
+        sys.modules["deepspeed.runtime.utils"] = runtime_utils_stub
 
     from resemble_enhance.enhancer.inference import denoise, enhance  # noqa: F811
 
@@ -162,12 +190,17 @@ def _process_channel(
     current = torch.from_numpy(channel).float()
     current_sr = samplerate
 
+    # See app/core/platform_compat.py: resemble-enhance's downloaded hparams.yaml embeds a
+    # PosixPath that fails to parse on Windows, and its LCFM sampler's scipy.optimize.fsolve
+    # usage breaks under numpy>=2.
     if denoise_enabled:
-        wet, current_sr = denoise(current, current_sr, device)
+        with resemble_enhance_compat_shims():
+            wet, current_sr = denoise(current, current_sr, device)
         current = _blend(current, wet, denoise_intensity)
 
     if enhance_enabled:
-        wet, current_sr = enhance(current, current_sr, device)
+        with resemble_enhance_compat_shims():
+            wet, current_sr = enhance(current, current_sr, device)
         current = _blend(current, wet, enhance_intensity)
 
     return current.cpu().numpy().astype(np.float64), current_sr

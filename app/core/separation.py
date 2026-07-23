@@ -12,6 +12,7 @@ from audio_separator.separator import Separator
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
+from app.core.platform_compat import windows_posixpath_shim
 
 logger = get_logger(__name__)
 
@@ -88,7 +89,8 @@ def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tu
         mdxc_params={"overlap": 8, "batch_size": 1},
         use_autocast=torch.cuda.is_available(),
     )
-    separator.load_model(model_filename=MODEL_FILENAME)
+    with windows_posixpath_shim():
+        separator.load_model(model_filename=MODEL_FILENAME)
     # Let audio-separator write its default-named stems, then rename them to our canonical
     # vocal.wav/instrumental.wav below. This avoids relying on custom_output_names, whose
     # chunked-processing code path matches stem-name keys case-sensitively while the model

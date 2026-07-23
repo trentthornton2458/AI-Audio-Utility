@@ -6,6 +6,8 @@ venv/
 *.egg-info/
 build/
 dist/
+installer/output/
 *.wav
 *.mp3
 .pytest_cache/
+.claude/

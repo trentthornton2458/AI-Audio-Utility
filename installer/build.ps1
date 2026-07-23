@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "  Music Mastery Enhancer - Windows Build & Setup Script" -ForegroundColor Cyan
+Write-Host "   Music Mastery Enhancer - Windows Build & Setup Script" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # 1. Check Python installation
@@ -21,14 +21,25 @@ try {
 # 2. Check and configure Virtual Environment
 Write-Host "[2/5] Setting up virtual environment..." -ForegroundColor Yellow
 $venvDir = Join-Path $PSScriptRoot "..\.venv"
-$venvActivated = $false
 
 if (Get-Command poetry -ErrorAction SilentlyContinue) {
     Write-Host "Found Poetry. Utilizing Poetry virtual environment..." -ForegroundColor Green
-    & poetry env use python
-    & poetry install --no-root
-    & poetry run pip install -e .[dev]
-    $runPrefix = "poetry run "
+    
+    # Try to enforce Python 3.11 for Poetry if py launcher is available
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        Write-Host "Configuring Poetry to use Python 3.11 via py launcher..." -ForegroundColor Gray
+        & poetry env use py -3.11
+    } else {
+        & poetry env use python
+    }
+
+    Write-Host "Installing dependencies with Poetry..." -ForegroundColor Gray
+    & poetry install --with dev
+    & poetry run pip install pyinstaller
+    # resemble-enhance's own metadata pins deepspeed==0.12.4 (fails to build on Windows) and
+    # gradio==4.8.0 (only needed by its demo webapp). Install it without its declared deps —
+    # pyproject.toml already lists the runtime deps it actually needs at inference time.
+    & poetry run pip install resemble-enhance --no-deps
 } else {
     Write-Host "Poetry not detected. Falling back to python venv..." -ForegroundColor Blue
     if (-not (Test-Path $venvDir)) {
@@ -49,11 +60,13 @@ if (Get-Command poetry -ErrorAction SilentlyContinue) {
     & $pipPath install --upgrade pip
     & $pipPath install -e ".[dev]"
     & $pipPath install pyinstaller
-
-    $runPrefix = "$pythonPath -m "
+    # resemble-enhance's own metadata pins deepspeed==0.12.4 (fails to build on Windows) and
+    # gradio==4.8.0 (only needed by its demo webapp). Install it without its declared deps —
+    # pyproject.toml already lists the runtime deps it actually needs at inference time.
+    & $pipPath install resemble-enhance --no-deps
 }
 
-# 3. Clean previous build artifacts to prevent PyInstaller caching issues
+# 3. Clean previous build artifacts
 Write-Host "[3/5] Cleaning old build directories..." -ForegroundColor Yellow
 $distDir = Join-Path $PSScriptRoot "..\dist"
 $buildDir = Join-Path $PSScriptRoot "..\build"
@@ -70,6 +83,11 @@ if (Test-Path $buildDir) {
 # 4. Build executable with PyInstaller
 Write-Host "[4/5] Compiling application with PyInstaller..." -ForegroundColor Yellow
 $specPath = Join-Path $PSScriptRoot "music_mastery_enhancer.spec"
+
+if (-not (Test-Path $specPath)) {
+    # Fallback if spec file is one level up
+    $specPath = Join-Path $PSScriptRoot "..\installer\music_mastery_enhancer.spec"
+}
 
 if (Get-Command poetry -ErrorAction SilentlyContinue) {
     & poetry run pyinstaller $specPath --noconfirm
@@ -95,19 +113,22 @@ if (Test-Path $exePath) {
 Write-Host "[5/5] Compiling Inno Setup installer..." -ForegroundColor Yellow
 $isccPath = ""
 
-# Search standard locations for ISCC.exe
-$searchPaths = @(
-    (Get-Command iscc -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source),
-    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-    "C:\Program Files\Inno Setup 6\ISCC.exe",
-    "C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
-    "C:\Program Files\Inno Setup 5\ISCC.exe"
-)
+# Search standard locations safely
+$cmdIscc = Get-Command iscc -ErrorAction SilentlyContinue
+if ($cmdIscc) { $isccPath = $cmdIscc.Source }
 
-foreach ($path in $searchPaths) {
-    if ($path -and (Test-Path $path)) {
-        $isccPath = $path
-        break
+if (-not $isccPath) {
+    $standardPaths = @(
+        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+        "C:\Program Files\Inno Setup 6\ISCC.exe",
+        "C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
+        "C:\Program Files\Inno Setup 5\ISCC.exe"
+    )
+    foreach ($path in $standardPaths) {
+        if (Test-Path $path) {
+            $isccPath = $path
+            break
+        }
     }
 }
 

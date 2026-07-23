@@ -8,8 +8,13 @@ installer stays small.
 
 ## Prerequisites
 
-- Python environment with the project installed (`pip install -e .[dev]` from the repo root)
+- Python 3.11 environment with the project installed (`pip install -e .[dev]` from the repo root)
 - `pyinstaller` (`pip install pyinstaller`)
+- `resemble-enhance` installed **without** its declared dependencies:
+  `pip install resemble-enhance --no-deps` (its own metadata pins `deepspeed==0.12.4`, which
+  cannot be built on Windows, and `gradio==4.8.0`, which is only used by its demo webapp;
+  `pyproject.toml`'s `dependencies` list already covers the runtime packages it actually needs —
+  see the comment there for details). `installer/build.ps1` runs this step automatically.
 - [Inno Setup](https://jrsoftware.org/isinfo.php) 6.x installed, with `iscc.exe` on your `PATH`
 
 ## 1. Build the executable with PyInstaller

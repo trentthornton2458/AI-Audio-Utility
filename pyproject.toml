@@ -6,13 +6,36 @@ readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "PySide6",
-    "audio-separator",
-    "resemble-enhance",
+    # The bare "audio-separator" package does not include onnxruntime at all -- it's gated
+    # behind extras ([cpu]/[gpu]/[dml]) even though audio_separator's own modules import
+    # onnxruntime unconditionally at import time. [cpu] is the safe universal default matching
+    # this app's CPU-always-works/GPU-optional architecture (see ARCHITECTURE.md); GPU
+    # acceleration for the BS-RoFormer torch model itself comes from installing a CUDA-enabled
+    # torch build separately, independent of this extra.
+    "audio-separator[cpu]",
+    # resemble-enhance is intentionally NOT listed here: its own metadata pins
+    # deepspeed==0.12.4 and gradio==4.8.0 as hard requirements, and deepspeed cannot be built on
+    # Windows (its setup.py needs libaio, a Linux-only library, plus symlink creation Windows
+    # blocks without Developer Mode). Neither package is reachable from the denoise/enhance
+    # inference path this app calls (app/core/neural_common.py stubs deepspeed out at import
+    # time), so installer/build.ps1 installs resemble-enhance separately via
+    # `pip install resemble-enhance --no-deps` and relies on the runtime deps listed explicitly
+    # below (at compatible versions, not resemble-enhance's pinned ancient ones) instead.
     "pedalboard",
     "pyloudnorm",
     "soundfile",
     "imageio-ffmpeg",
     "torch",
+    "torchaudio",
+    "jsonschema",
+    "celluloid",
+    "matplotlib",
+    "omegaconf",
+    "antlr4-python3-runtime==4.9.3",  # omegaconf's generated parser needs the 4.9.x ATN format
+    "pandas",
+    "ptflops",
+    "rich",
+    "tabulate",
 ]
 
 [project.optional-dependencies]
