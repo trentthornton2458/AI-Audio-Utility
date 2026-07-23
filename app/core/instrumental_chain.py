@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import soundfile as sf
 from pedalboard import HighpassFilter, HighShelfFilter, Pedalboard
 
@@ -85,12 +86,31 @@ def apply_dsp_chain(neural_instrumental_path: Path, eq_params: InstrumentalEqPar
     configured range) rather than hardcoded, since the instrumental chain is meant to run gentler
     and be tuned per track.
     """
-    mud_cut_hz = _clamp(eq_params.mud_cut_hz, MUD_CUT_HZ_MIN, MUD_CUT_HZ_MAX)
-    dehiss_shelf_hz = _clamp(eq_params.dehiss_shelf_hz, DEHISS_SHELF_HZ_MIN, DEHISS_SHELF_HZ_MAX)
-    dehiss_gain_db = _clamp(eq_params.dehiss_gain_db, DEHISS_GAIN_DB_MIN, DEHISS_GAIN_DB_MAX)
-
     audio, samplerate = sf.read(str(neural_instrumental_path), always_2d=True, dtype="float32")
     channels_first = audio.T
+
+    # Sanitize input: replace any NaN or Inf with 0.0 to prevent DSP instability
+    channels_first = np.nan_to_num(channels_first, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # To ensure smooth frequency response transitions and prevent digital filter instability,
+    # the cutoff frequencies must not exceed a safe margin below the Nyquist frequency.
+    # We define a safe limit at 49% of the sample rate.
+    safe_cutoff_limit = 0.49 * samplerate
+
+    # Clamping range dynamically configured so safe limit takes precedence if Nyquist is extremely low
+    max_mud_cut = min(MUD_CUT_HZ_MAX, safe_cutoff_limit)
+    min_mud_cut = min(MUD_CUT_HZ_MIN, max_mud_cut)
+    mud_cut_hz = _clamp(eq_params.mud_cut_hz, min_mud_cut, max_mud_cut)
+
+    max_dehiss = min(DEHISS_SHELF_HZ_MAX, safe_cutoff_limit)
+    min_dehiss = min(DEHISS_SHELF_HZ_MIN, max_dehiss)
+    dehiss_shelf_hz = _clamp(eq_params.dehiss_shelf_hz, min_dehiss, max_dehiss)
+
+    # Ensure mud_cut_hz doesn't exceed dehiss_shelf_hz for logical filter ordering
+    if mud_cut_hz > dehiss_shelf_hz:
+        mud_cut_hz = dehiss_shelf_hz
+
+    dehiss_gain_db = _clamp(eq_params.dehiss_gain_db, DEHISS_GAIN_DB_MIN, DEHISS_GAIN_DB_MAX)
 
     board = Pedalboard(
         [
@@ -99,6 +119,9 @@ def apply_dsp_chain(neural_instrumental_path: Path, eq_params: InstrumentalEqPar
         ]
     )
     processed = board(channels_first, samplerate)
+
+    # Sanitize output: replace any NaN or Inf with 0.0 to prevent file corruption
+    processed = np.nan_to_num(processed, nan=0.0, posinf=0.0, neginf=0.0)
 
     sf.write(str(out_path), processed.T, samplerate, subtype=DSP_SUBTYPE)
     logger.info(
