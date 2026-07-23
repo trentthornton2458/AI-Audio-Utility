@@ -37,7 +37,7 @@ from app.workers.render_job import RenderJob
 class MockSeparator:
     """Mock implementation of audio_separator's Separator for fast, weightless integration testing."""
 
-    def __init__(self, output_dir: str, model_file_dir: str) -> None:
+    def __init__(self, output_dir: str, model_file_dir: str, *args, **kwargs) -> None:
         self.output_dir = Path(output_dir)
         self.model_file_dir = Path(model_file_dir)
 
