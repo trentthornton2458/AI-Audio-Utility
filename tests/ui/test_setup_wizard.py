@@ -35,28 +35,92 @@ def test_setup_wizard_page_structure(qtbot):
     assert wizard.page(page_ids[3]) == wizard.completion_page
 
 
-def test_hardware_check_page_gpu_detected(qtbot):
+def test_hardware_check_page_gpu_detected_sufficient_ram(qtbot):
     page = HardwareCheckPage()
     qtbot.addWidget(page)
 
-    with patch("torch.cuda.is_available", return_value=True), patch(
-        "torch.cuda.get_device_name", return_value="NVIDIA GeForce RTX 4090"
-    ), patch("torch.cuda.device_count", return_value=1):
+    mock_report = {
+        "frozen": False,
+        "pyside6_plugins_ok": True,
+        "cuda_dll_ok": True,
+        "ram_gb": 16.0,
+    }
+
+    with patch("torch.cuda.is_available", return_value=True), \
+         patch("torch.cuda.get_device_name", return_value="NVIDIA GeForce RTX 4090"), \
+         patch("torch.cuda.device_count", return_value=1), \
+         patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report):
         page.on_check_hardware()
         assert page._gpu_detected is True
         assert page._status_text == "GPU detected: NVIDIA GeForce RTX 4090"
         assert "GPU detected: NVIDIA GeForce RTX 4090" in page._status_label.text()
+        assert "sufficient for local neural rendering" in page._detail_label.text()
+        assert "Low-RAM Warning" not in page._detail_label.text()
 
 
-def test_hardware_check_page_cpu_fallback(qtbot):
+def test_hardware_check_page_gpu_detected_low_ram(qtbot):
     page = HardwareCheckPage()
     qtbot.addWidget(page)
 
-    with patch("torch.cuda.is_available", return_value=False):
+    mock_report = {
+        "frozen": False,
+        "pyside6_plugins_ok": True,
+        "cuda_dll_ok": True,
+        "ram_gb": 4.0,
+    }
+
+    with patch("torch.cuda.is_available", return_value=True), \
+         patch("torch.cuda.get_device_name", return_value="NVIDIA GeForce RTX 4090"), \
+         patch("torch.cuda.device_count", return_value=1), \
+         patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report):
+        page.on_check_hardware()
+        assert page._gpu_detected is True
+        assert page._status_text == "GPU detected: NVIDIA GeForce RTX 4090"
+        assert "GPU detected: NVIDIA GeForce RTX 4090" in page._status_label.text()
+        assert "Low-RAM Warning" in page._detail_label.text()
+        assert "less than 8 GB of RAM" in page._detail_label.text()
+
+
+def test_hardware_check_page_cpu_fallback_low_ram_missing_driver(qtbot):
+    page = HardwareCheckPage()
+    qtbot.addWidget(page)
+
+    mock_report = {
+        "frozen": True,
+        "pyside6_plugins_ok": True,
+        "cuda_dll_ok": False,
+        "ram_gb": 6.0,
+    }
+
+    with patch("torch.cuda.is_available", return_value=False), \
+         patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report):
         page.on_check_hardware()
         assert page._gpu_detected is False
         assert page._status_text == "No GPU detected — will run on CPU (slower)"
         assert "No GPU detected — will run on CPU (slower)" in page._status_label.text()
+        assert "Critical Memory Warning" in page._detail_label.text()
+        assert "Missing Driver" in page._detail_label.text()
+        assert "nvcuda.dll" in page._detail_label.text()
+
+
+def test_hardware_check_page_cpu_fallback_sufficient_ram_pyside_warning(qtbot):
+    page = HardwareCheckPage()
+    qtbot.addWidget(page)
+
+    mock_report = {
+        "frozen": True,
+        "pyside6_plugins_ok": False,
+        "cuda_dll_ok": True,
+        "ram_gb": 32.0,
+    }
+
+    with patch("torch.cuda.is_available", return_value=False), \
+         patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report):
+        page.on_check_hardware()
+        assert page._gpu_detected is False
+        assert page._status_text == "No GPU detected — will run on CPU (slower)"
+        assert "sufficient for local CPU rendering" in page._detail_label.text()
+        assert "PySide6 Plugins Diagnostic Warning" in page._detail_label.text()
 
 
 def test_model_download_page_progress_and_success(qtbot):
