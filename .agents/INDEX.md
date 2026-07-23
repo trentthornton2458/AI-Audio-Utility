@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** AI Audio Utility
-> **Last Updated:** 2026-07-23T02:56:25.153Z
+> **Last Updated:** 2026-07-23T02:59:14.997Z
 
 ---
 
@@ -80,9 +80,9 @@ None specified.
 - [x] **#9: Integrate resemble-enhance with per-stem caching** [claude] 
 - [x] **#10: Build vocal Pedalboard DSP chain** [claude] (Commit: e6322e1)
 - [ ] **#11: Test vocal DSP chain correctness** [jules] 
-- [/] **#12: Build instrumental neural + DSP chain** [claude] 
+- [x] **#12: Build instrumental neural + DSP chain** [claude] (Commit: c8c299d)
 - [ ] **#13: Test instrumental chain** [jules] 
-- [ ] **#14: Build remix and mastering stage** [claude] 
+- [/] **#14: Build remix and mastering stage** [claude] 
 - [ ] **#15: Test remix/mastering/export accuracy** [jules] 
 - [ ] **#16: Implement Preset data model and persistence** [claude] 
 - [ ] **#17: Test preset round-tripping** [jules] 
