@@ -20,7 +20,7 @@ class _FakeSeparator:
     and "<base>_(Instrumental)_<model>.wav") into output_dir and returns their bare filenames.
     """
 
-    def __init__(self, output_dir: str, model_file_dir: str) -> None:
+    def __init__(self, output_dir: str, model_file_dir: str, *args, **kwargs) -> None:
         self._output_dir = Path(output_dir)
 
     def load_model(self, model_filename: str) -> None:  # noqa: D401 - test stub

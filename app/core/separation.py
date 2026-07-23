@@ -82,7 +82,12 @@ def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tu
         )
 
     logger.info("Separating stems for track %s from %s", track_id, normalized_wav_path)
-    separator = Separator(output_dir=str(stems_dir), model_file_dir=str(cache_manager.models_dir))
+    separator = Separator(
+        output_dir=str(stems_dir),
+        model_file_dir=str(cache_manager.models_dir),
+        mdxc_params={"overlap": 8, "batch_size": 1},
+        use_autocast=torch.cuda.is_available(),
+    )
     separator.load_model(model_filename=MODEL_FILENAME)
     # Let audio-separator write its default-named stems, then rename them to our canonical
     # vocal.wav/instrumental.wav below. This avoids relying on custom_output_names, whose
