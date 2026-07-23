@@ -42,6 +42,7 @@ class ABCompareView(QWidget):
         super().__init__(parent)
         self._cache_manager = cache_manager or CacheManager()
         self._syncing_seek = False
+        self._syncing_state = False
         self._original_path: Optional[Path] = None
         self._cleaned_path: Optional[Path] = None
 
@@ -151,6 +152,10 @@ class ABCompareView(QWidget):
     def _wire_events(self) -> None:
         self._original_player.seekRequested.connect(self.on_original_seek)
         self._cleaned_player.seekRequested.connect(self.on_cleaned_seek)
+        self._original_player.positionChanged.connect(self.on_original_position_changed)
+        self._cleaned_player.positionChanged.connect(self.on_cleaned_position_changed)
+        self._original_player.playbackStateChanged.connect(self.on_original_state_changed)
+        self._cleaned_player.playbackStateChanged.connect(self.on_cleaned_state_changed)
         self._render_history_panel.renderSelected.connect(self.load_cleaned)
 
     # --- Public API Methods ---
@@ -235,6 +240,62 @@ class ABCompareView(QWidget):
                 self._original_player.seek(position_ms)
             finally:
                 self._syncing_seek = False
+
+    @Slot(int)
+    def on_original_position_changed(self, position_ms: int) -> None:
+        if self._sync_seek_cb.isChecked() and not self._syncing_seek:
+            cleaned_pos = self._cleaned_player.get_position()
+            drift = abs(position_ms - cleaned_pos)
+            if drift > 20:
+                if self._cleaned_player._muted_state or not self._original_player._muted_state:
+                    self._syncing_seek = True
+                    try:
+                        self._cleaned_player.seek(position_ms)
+                    finally:
+                        self._syncing_seek = False
+
+    @Slot(int)
+    def on_cleaned_position_changed(self, position_ms: int) -> None:
+        if self._sync_seek_cb.isChecked() and not self._syncing_seek:
+            orig_pos = self._original_player.get_position()
+            drift = abs(position_ms - orig_pos)
+            if drift > 20:
+                if self._original_player._muted_state or not self._cleaned_player._muted_state:
+                    self._syncing_seek = True
+                    try:
+                        self._original_player.seek(position_ms)
+                    finally:
+                        self._syncing_seek = False
+
+    @Slot(object)
+    def on_original_state_changed(self, state: object) -> None:
+        from PySide6.QtMultimedia import QMediaPlayer
+        if self._sync_seek_cb.isChecked() and not self._syncing_state:
+            self._syncing_state = True
+            try:
+                if state == QMediaPlayer.PlaybackState.PlayingState:
+                    self._cleaned_player.play()
+                elif state == QMediaPlayer.PlaybackState.PausedState:
+                    self._cleaned_player.pause()
+                elif state == QMediaPlayer.PlaybackState.StoppedState:
+                    self._cleaned_player.stop()
+            finally:
+                self._syncing_state = False
+
+    @Slot(object)
+    def on_cleaned_state_changed(self, state: object) -> None:
+        from PySide6.QtMultimedia import QMediaPlayer
+        if self._sync_seek_cb.isChecked() and not self._syncing_state:
+            self._syncing_state = True
+            try:
+                if state == QMediaPlayer.PlaybackState.PlayingState:
+                    self._original_player.play()
+                elif state == QMediaPlayer.PlaybackState.PausedState:
+                    self._original_player.pause()
+                elif state == QMediaPlayer.PlaybackState.StoppedState:
+                    self._original_player.stop()
+            finally:
+                self._syncing_state = False
 
     @Slot(int, bool)
     def on_solo_mode_changed(self, button_id: int, checked: bool) -> None:
