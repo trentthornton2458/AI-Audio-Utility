@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** AI Audio Utility
-> **Last Updated:** 2026-07-23T03:05:50.742Z
+> **Last Updated:** 2026-07-23T03:08:48.467Z
 
 ---
 
@@ -87,9 +87,9 @@ None specified.
 - [x] **#16: Implement Preset data model and persistence** [claude] (Commit: 7385825)
 - [ ] **#17: Test preset round-tripping** [jules] 
 - [x] **#18: Build the render job worker** [claude] (Commit: 00c628b)
-- [/] **#19: Build the first-run guided setup wizard UI** [antigravity] 
+- [x] **#19: Build the first-run guided setup wizard UI** [antigravity] (Commit: 706fae8)
 - [ ] **#20: Test job cancellation and failure paths** [jules] 
-- [ ] **#21: Build main window and navigation shell** [antigravity] 
+- [/] **#21: Build main window and navigation shell** [antigravity] 
 - [ ] **#22: Bug sweep on file load and navigation flow** [jules] 
 - [ ] **#23: Build vocal control panel** [antigravity] 
 - [ ] **#24: Build instrumental control panel** [antigravity] 
