@@ -7,6 +7,7 @@ import hashlib
 import sys
 import types
 from pathlib import Path
+from typing import Callable, Optional
 
 import numpy as np
 import soundfile as sf
@@ -46,6 +47,8 @@ def run_neural_pass(
     cache_manager: CacheManager,
     filename_prefix: str,
     stem_label: str,
+    progress_callback: Optional[Callable[[float], None]] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> Path:
     """Run resemble-enhance's denoise and/or enhance stages on an isolated stem.
 
@@ -60,12 +63,20 @@ def run_neural_pass(
 
     stem_label is used only for logging (e.g. "vocal" or "instrumental").
     """
+    if is_cancelled and is_cancelled():
+        raise InterruptedError("Neural pass cancelled")
+
+    if progress_callback:
+        progress_callback(0.0)
+
     track_id = stem_path.parent.parent.name
     settings_hash = _hash_settings(denoise_enabled, denoise_intensity, enhance_enabled, enhance_intensity)
     output_path = cache_manager.stems_dir(track_id) / f"{filename_prefix}{settings_hash}.wav"
 
     if output_path.is_file():
         logger.info("Using cached neural %s pass for track %s: %s", stem_label, track_id, output_path)
+        if progress_callback:
+            progress_callback(1.0)
         return output_path
 
     denoise_intensity = _clamp01(denoise_intensity)
@@ -80,6 +91,8 @@ def run_neural_pass(
             track_id,
         )
         sf.write(str(output_path), audio, samplerate, subtype=NEURAL_SUBTYPE)
+        if progress_callback:
+            progress_callback(1.0)
         return output_path
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -106,6 +119,8 @@ def run_neural_pass(
     processed_channels: list[np.ndarray] = []
     output_samplerate = samplerate
     for channel_index in range(num_channels):
+        if is_cancelled and is_cancelled():
+            raise InterruptedError("Neural pass cancelled")
         channel_audio, output_samplerate = _process_channel(
             audio[:, channel_index],
             samplerate,
@@ -116,12 +131,19 @@ def run_neural_pass(
             enhance_intensity,
         )
         processed_channels.append(channel_audio)
+        if progress_callback:
+            progress_callback(0.9 * (channel_index + 1) / num_channels)
+
+    if is_cancelled and is_cancelled():
+        raise InterruptedError("Neural pass cancelled")
 
     min_length = min(len(channel_audio) for channel_audio in processed_channels)
     processed_audio = np.stack([channel_audio[:min_length] for channel_audio in processed_channels], axis=1)
 
     sf.write(str(output_path), processed_audio, output_samplerate, subtype=NEURAL_SUBTYPE)
     logger.info("Wrote neural %s pass for track %s -> %s", stem_label, track_id, output_path)
+    if progress_callback:
+        progress_callback(1.0)
     return output_path
 
 

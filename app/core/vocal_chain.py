@@ -4,6 +4,7 @@ plus the adjustable Pedalboard DSP chain (HPF/LPF/notch/de-esser) and neural/DSP
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable, Optional
 
 import numpy as np
 import soundfile as sf
@@ -43,6 +44,8 @@ def run_neural_pass(
     enhance_enabled: bool,
     enhance_intensity: float,
     cache_manager: CacheManager,
+    progress_callback: Optional[Callable[[float], None]] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> Path:
     """Run resemble-enhance's denoise and/or enhance stages on an isolated vocal stem.
 
@@ -59,6 +62,8 @@ def run_neural_pass(
         cache_manager,
         NEURAL_FILENAME_PREFIX,
         NEURAL_STEM_LABEL,
+        progress_callback=progress_callback,
+        is_cancelled=is_cancelled,
     )
 
 

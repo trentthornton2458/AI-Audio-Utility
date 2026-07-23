@@ -98,3 +98,106 @@ def test_render_job_failure_signal(tmp_path: Path):
 
     assert len(failed_messages) == 1
     assert "Corrupt WAV format" in failed_messages[0]
+
+
+def test_render_job_progress_emission(tmp_path: Path):
+    config = AppConfig(cache_root=tmp_path / "cache")
+    cache_mgr = CacheManager(config=config)
+
+    input_path = tmp_path / "input.wav"
+    input_path.touch()
+
+    preset = Preset()
+    job = RenderJob(input_path=input_path, preset=preset, cache_manager=cache_mgr)
+    dummy_audio = np.zeros((44100, 2), dtype=np.float64)
+
+    progress_vals = []
+    job.progressChanged.connect(progress_vals.append)
+
+    with patch("app.core.ingestion.load_and_normalize_track", return_value=tmp_path / "cache" / "track123" / "input.wav"), \
+         patch("app.core.separation.separate_stems", return_value=(tmp_path / "vocal.wav", tmp_path / "inst.wav")), \
+         patch("app.core.vocal_chain.run_neural_pass", return_value=tmp_path / "n_vocal.wav") as mock_vpass, \
+         patch("app.core.vocal_chain.apply_dsp_chain"), \
+         patch("app.core.vocal_chain.blend_vocal", return_value=dummy_audio), \
+         patch("app.core.instrumental_chain.run_neural_pass", return_value=tmp_path / "n_inst.wav") as mock_ipass, \
+         patch("app.core.instrumental_chain.apply_dsp_chain"), \
+         patch("soundfile.info", return_value=MagicMock(samplerate=44100)), \
+         patch("soundfile.read", return_value=(dummy_audio, 44100)), \
+         patch("app.core.remix_master.mix_stems", return_value=dummy_audio), \
+         patch("app.core.remix_master.master", return_value=dummy_audio), \
+         patch("app.core.remix_master.export_wav", side_effect=lambda audio, sr, p: p):
+
+        output_path = job._render()
+
+        assert len(progress_vals) > 0
+        for i in range(len(progress_vals) - 1):
+            assert progress_vals[i] <= progress_vals[i + 1]
+
+        mock_vpass.assert_called_once()
+        assert "progress_callback" in mock_vpass.call_args[1]
+        assert "is_cancelled" in mock_vpass.call_args[1]
+
+        mock_ipass.assert_called_once()
+        assert "progress_callback" in mock_ipass.call_args[1]
+        assert "is_cancelled" in mock_ipass.call_args[1]
+
+
+def test_render_job_cancellation_removes_partial_files(tmp_path: Path):
+    config = AppConfig(cache_root=tmp_path / "cache")
+    cache_mgr = CacheManager(config=config)
+
+    input_path = tmp_path / "input.wav"
+    input_path.touch()
+
+    preset = Preset()
+    job = RenderJob(input_path=input_path, preset=preset, cache_manager=cache_mgr)
+
+    file1 = tmp_path / "partial_stem.wav"
+    file2 = tmp_path / "partial_output.wav"
+
+    file1.touch()
+    file2.touch()
+
+    assert file1.exists()
+    assert file2.exists()
+
+    job._active_files.add(file1)
+    job._active_files.add(file2)
+
+    cancelled_emitted = []
+    job.cancelled.connect(lambda: cancelled_emitted.append(True))
+
+    from app.workers.render_job import _JobCancelled
+    with patch.object(job, "_render", side_effect=_JobCancelled):
+        job.run()
+
+    assert len(cancelled_emitted) == 1
+    assert not file1.exists()
+    assert not file2.exists()
+
+
+def test_render_job_failure_removes_partial_files(tmp_path: Path):
+    config = AppConfig(cache_root=tmp_path / "cache")
+    cache_mgr = CacheManager(config=config)
+
+    input_path = tmp_path / "input.wav"
+    input_path.touch()
+
+    preset = Preset()
+    job = RenderJob(input_path=input_path, preset=preset, cache_manager=cache_mgr)
+
+    file1 = tmp_path / "partial_stem.wav"
+    file1.touch()
+    assert file1.exists()
+
+    job._active_files.add(file1)
+
+    failed_messages = []
+    job.failed.connect(failed_messages.append)
+
+    with patch.object(job, "_render", side_effect=ValueError("Unexpected DSP error")):
+        job.run()
+
+    assert len(failed_messages) == 1
+    assert "Unexpected DSP error" in failed_messages[0]
+    assert not file1.exists()
