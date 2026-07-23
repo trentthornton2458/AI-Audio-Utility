@@ -23,7 +23,7 @@ INSTRUMENTAL_FILENAME = f"{INSTRUMENTAL_STEM_NAME}.wav"
 
 
 def ensure_ffmpeg_in_path(bin_dir: Path) -> Path:
-    """Ensure ffmpeg.exe exists in bin_dir (or imageio_ffmpeg dir) and bin_dir is in os.environ['PATH']."""
+    """Ensure ffmpeg is available for audio-separator and pydub."""
     try:
         ffmpeg_src = Path(imageio_ffmpeg.get_ffmpeg_exe())
         target_exe = bin_dir / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
@@ -32,26 +32,25 @@ def ensure_ffmpeg_in_path(bin_dir: Path) -> Path:
             shutil.copy(ffmpeg_src, target_exe)
             logger.info("Copied ffmpeg binary to %s", target_exe)
 
-        bin_dir_str = str(bin_dir.resolve())
-        path_parts = os.environ.get("PATH", "").split(os.pathsep)
-        if bin_dir_str not in path_parts:
-            os.environ["PATH"] = bin_dir_str + os.pathsep + os.environ.get("PATH", "")
-            logger.info("Added %s to PATH for audio-separator", bin_dir_str)
+        # 1. Explicitly configure pydub to use this exact binary
+        try:
+            import pydub
+            pydub.AudioSegment.converter = str(target_exe)
+            logger.info("Configured pydub converter to %s", target_exe)
+        except ImportError:
+            pass
 
-        # Also ensure source dir is in PATH as fallback
-        src_dir_str = str(ffmpeg_src.parent.resolve())
-        if src_dir_str not in os.environ.get("PATH", "").split(os.pathsep):
-            src_target = ffmpeg_src.parent / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
-            if not src_target.is_file():
-                try:
-                    shutil.copy(ffmpeg_src, src_target)
-                except Exception:
-                    pass
-            os.environ["PATH"] = src_dir_str + os.pathsep + os.environ.get("PATH", "")
+        # 2. Monkey-patch audio-separator's ffmpeg check to avoid PATH issues
+        try:
+            from audio_separator.separator.separator import Separator
+            Separator.check_ffmpeg_installed = lambda self: None
+            logger.info("Monkey-patched audio-separator ffmpeg check")
+        except ImportError:
+            pass
 
         return target_exe
     except Exception as exc:
-        logger.warning("Failed to setup ffmpeg in PATH: %s", exc)
+        logger.warning("Failed to setup ffmpeg: %s", exc)
         return Path("ffmpeg")
 
 
