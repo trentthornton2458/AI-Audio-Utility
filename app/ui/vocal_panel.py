@@ -43,6 +43,92 @@ NOTCH_SLIDER_MAX = 60  # Corresponds to 6.0 dB depth
 NOTCH_SLIDER_DEFAULT = 45  # Corresponds to 4.5 dB depth
 
 
+def make_slider_stylesheet(accent_color: str = "#6c5ce7") -> str:
+    """Return standard dark theme stylesheet for QSlider with custom accent color."""
+    return (
+        "QSlider::groove:horizontal { border: 1px solid #2d2f3d; height: 6px; background: #1a1b24; border-radius: 3px; }"
+        f"QSlider::sub-page:horizontal {{ background: {accent_color}; border-radius: 3px; }}"
+        "QSlider::handle:horizontal { background: #ffffff; border: 2px solid "
+        f"{accent_color}; width: 16px; margin-top: -6px; margin-bottom: -6px; border-radius: 8px; }}"
+        "QSlider::handle:horizontal:hover { background: #e1e2e6; cursor: pointer; }"
+    )
+
+
+class IntensitySlider(QWidget):
+    """Reusable control widget combining a toggle QCheckBox, percentage QLabel, and QSlider."""
+
+    toggled = Signal(bool)
+    valueChanged = Signal(int)
+
+    def __init__(
+        self,
+        title: str,
+        initial_value: int = 50,
+        checked: bool = True,
+        accent_color: str = "#6c5ce7",
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._accent_color = accent_color
+        self._init_ui(title, initial_value, checked)
+
+    def _init_ui(self, title: str, initial_value: int, checked: bool) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.checkbox = QCheckBox(title)
+        self.checkbox.setChecked(checked)
+        self.checkbox.setStyleSheet("QCheckBox { color: #ffffff; font-weight: bold; }")
+
+        self.value_label = QLabel(f"{initial_value}%")
+        self.value_label.setStyleSheet("color: #55efc4; font-weight: bold;")
+
+        header_layout.addWidget(self.checkbox)
+        header_layout.addStretch()
+        header_layout.addWidget(self.value_label)
+        layout.addLayout(header_layout)
+
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(0, 100)
+        self.slider.setValue(initial_value)
+        self.slider.setEnabled(checked)
+        self.slider.setStyleSheet(make_slider_stylesheet(self._accent_color))
+        layout.addWidget(self.slider)
+
+        self.checkbox.toggled.connect(self._on_toggled)
+        self.slider.valueChanged.connect(self._on_value_changed)
+
+    @Slot(bool)
+    def _on_toggled(self, checked: bool) -> None:
+        self.slider.setEnabled(checked)
+        self.toggled.emit(checked)
+
+    @Slot(int)
+    def _on_value_changed(self, value: int) -> None:
+        self.value_label.setText(f"{value}%")
+        self.valueChanged.emit(value)
+
+    def is_checked(self) -> bool:
+        return self.checkbox.isChecked()
+
+    def set_checked(self, checked: bool) -> None:
+        self.checkbox.setChecked(checked)
+        self.slider.setEnabled(checked)
+
+    def intensity(self) -> float:
+        return self.slider.value() / 100.0
+
+    def set_intensity(self, val: float) -> None:
+        int_val = int(round(val * 100))
+        self.slider.setValue(int_val)
+        self.value_label.setText(f"{int_val}%")
+
+
+
 class VocalPanel(QWidget):
     """Control panel QWidget for configuring vocal stem cleaning, DSP parameters, and gain."""
 
@@ -127,50 +213,30 @@ class VocalPanel(QWidget):
         neural_layout.setSpacing(14)
 
         # Denoise Row
-        denoise_row = QVBoxLayout()
-        denoise_header = QHBoxLayout()
-        self._denoise_cb = QCheckBox("Enable Denoise")
-        self._denoise_cb.setChecked(self._current_settings.vocal_denoise_enabled)
-        self._denoise_cb.setStyleSheet("QCheckBox { color: #ffffff; font-weight: bold; }")
+        self._denoise_widget = IntensitySlider(
+            "Enable Denoise",
+            initial_value=int(round(self._current_settings.vocal_denoise_intensity * 100)),
+            checked=self._current_settings.vocal_denoise_enabled,
+        )
+        self._denoise_cb = self._denoise_widget.checkbox
+        self._denoise_slider = self._denoise_widget.slider
+        self._denoise_val_label = self._denoise_widget.value_label
         self._denoise_cb.toggled.connect(self.on_denoise_toggled)
-
-        self._denoise_val_label = QLabel(f"{int(self._current_settings.vocal_denoise_intensity * 100)}%")
-        self._denoise_val_label.setStyleSheet("color: #55efc4; font-weight: bold;")
-        denoise_header.addWidget(self._denoise_cb)
-        denoise_header.addStretch()
-        denoise_header.addWidget(self._denoise_val_label)
-        denoise_row.addLayout(denoise_header)
-
-        self._denoise_slider = QSlider(Qt.Orientation.Horizontal)
-        self._denoise_slider.setRange(0, 100)
-        self._denoise_slider.setValue(int(self._current_settings.vocal_denoise_intensity * 100))
-        self._denoise_slider.setStyleSheet(self._slider_style())
         self._denoise_slider.valueChanged.connect(self.on_denoise_intensity_changed)
-        denoise_row.addWidget(self._denoise_slider)
-        neural_layout.addLayout(denoise_row)
+        neural_layout.addWidget(self._denoise_widget)
 
         # Enhance Row
-        enhance_row = QVBoxLayout()
-        enhance_header = QHBoxLayout()
-        self._enhance_cb = QCheckBox("Enable Harmonic Enhancement")
-        self._enhance_cb.setChecked(self._current_settings.vocal_enhance_enabled)
-        self._enhance_cb.setStyleSheet("QCheckBox { color: #ffffff; font-weight: bold; }")
+        self._enhance_widget = IntensitySlider(
+            "Enable Harmonic Enhancement",
+            initial_value=int(round(self._current_settings.vocal_enhance_intensity * 100)),
+            checked=self._current_settings.vocal_enhance_enabled,
+        )
+        self._enhance_cb = self._enhance_widget.checkbox
+        self._enhance_slider = self._enhance_widget.slider
+        self._enhance_val_label = self._enhance_widget.value_label
         self._enhance_cb.toggled.connect(self.on_enhance_toggled)
-
-        self._enhance_val_label = QLabel(f"{int(self._current_settings.vocal_enhance_intensity * 100)}%")
-        self._enhance_val_label.setStyleSheet("color: #55efc4; font-weight: bold;")
-        enhance_header.addWidget(self._enhance_cb)
-        enhance_header.addStretch()
-        enhance_header.addWidget(self._enhance_val_label)
-        enhance_row.addLayout(enhance_header)
-
-        self._enhance_slider = QSlider(Qt.Orientation.Horizontal)
-        self._enhance_slider.setRange(0, 100)
-        self._enhance_slider.setValue(int(self._current_settings.vocal_enhance_intensity * 100))
-        self._enhance_slider.setStyleSheet(self._slider_style())
         self._enhance_slider.valueChanged.connect(self.on_enhance_intensity_changed)
-        enhance_row.addWidget(self._enhance_slider)
-        neural_layout.addLayout(enhance_row)
+        neural_layout.addWidget(self._enhance_widget)
 
         main_layout.addWidget(neural_group)
 
@@ -275,13 +341,7 @@ class VocalPanel(QWidget):
         main_layout.addStretch()
 
     def _slider_style(self, accent_color: str = "#6c5ce7") -> str:
-        return (
-            "QSlider::groove:horizontal { border: 1px solid #2d2f3d; height: 6px; background: #1a1b24; border-radius: 3px; }"
-            f"QSlider::sub-page:horizontal {{ background: {accent_color}; border-radius: 3px; }}"
-            "QSlider::handle:horizontal { background: #ffffff; border: 2px solid "
-            f"{accent_color}; width: 16px; margin-top: -6px; margin-bottom: -6px; border-radius: 8px; }}"
-            "QSlider::handle:horizontal:hover { background: #e1e2e6; cursor: pointer; }"
-        )
+        return make_slider_stylesheet(accent_color)
 
     # --- Properties & State Accessors ---
 

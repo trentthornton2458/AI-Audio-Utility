@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** AI Audio Utility
-> **Last Updated:** 2026-07-23T03:10:52.270Z
+> **Last Updated:** 2026-07-23T03:14:27.293Z
 
 ---
 
@@ -91,8 +91,8 @@ None specified.
 - [ ] **#20: Test job cancellation and failure paths** [jules] 
 - [x] **#21: Build main window and navigation shell** [antigravity] (Commit: 0fbe18f)
 - [ ] **#22: Bug sweep on file load and navigation flow** [jules] 
-- [/] **#23: Build vocal control panel** [antigravity] 
-- [ ] **#24: Build instrumental control panel** [antigravity] 
+- [/] **#23: Build vocal control panel** [antigravity] (Commit: 0fa603a)
+- [/] **#24: Build instrumental control panel** [antigravity] 
 - [ ] **#25: Test control panel state and signal emission** [jules] 
 - [ ] **#26: Build waveform A/B player widget** [antigravity] 
 - [ ] **#27: Build render history panel** [antigravity] 
