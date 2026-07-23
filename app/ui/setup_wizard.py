@@ -11,6 +11,7 @@ Pages:
 from __future__ import annotations
 
 import sys
+import warnings
 from typing import Dict, Optional
 
 import torch
@@ -33,6 +34,7 @@ from app.setup.model_downloader import (
     ModelDownloader,
     ModelDownloadError,
 )
+from app.setup.installer import run_diagnostics, get_system_ram_gb, check_cuda_dll, check_pyside6_plugins
 
 logger = get_logger(__name__)
 
@@ -154,7 +156,23 @@ class HardwareCheckPage(QWizardPage):
     @Slot()
     def on_check_hardware(self) -> None:
         """Slot to perform CUDA hardware detection and update UI labels."""
-        cuda_available = torch.cuda.is_available()
+        # Suppress PyTorch warnings during hardware check
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning)
+            try:
+                cuda_available = torch.cuda.is_available()
+            except Exception as e:
+                logger.warning("Error checking torch.cuda.is_available: %s", e)
+                cuda_available = False
+
+        # Run environmental diagnostics
+        diags = run_diagnostics()
+        ram_gb = diags.get("ram_gb", 8.0)
+        pyside_ok = diags.get("pyside6_plugins_ok", True)
+        cuda_dll_ok = diags.get("cuda_dll_ok", True)
+
+        detail_paras = []
+
         if cuda_available:
             try:
                 gpu_name = torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else "CUDA Device"
@@ -164,21 +182,62 @@ class HardwareCheckPage(QWizardPage):
             self._status_text = f"GPU detected: {gpu_name}"
             self._status_label.setText(self._status_text)
             self._status_label.setStyleSheet("color: #2e7d32;")
-            self._detail_label.setText(
+            detail_paras.append(
                 "NVIDIA CUDA acceleration is available on your system. "
                 "Neural stem separation and cleaning will execute using high-performance GPU acceleration."
             )
+
+            if ram_gb < 8.0:
+                detail_paras.append(
+                    f"⚠️ Low-RAM Warning: Your system has less than 8 GB of RAM ({ram_gb:.1f} GB detected). "
+                    "You may experience slow performance, out-of-memory errors, or system instability during stem "
+                    "separation or neural cleanup. It is strongly recommended to close other open applications."
+                )
+            else:
+                detail_paras.append(
+                    f"Your system has {ram_gb:.1f} GB of RAM, which is sufficient for local neural rendering."
+                )
+
             logger.info("Hardware check result: GPU detected (%s)", gpu_name)
         else:
             self._gpu_detected = False
             self._status_text = "No GPU detected — will run on CPU (slower)"
             self._status_label.setText(self._status_text)
             self._status_label.setStyleSheet("color: #d84315;")
-            self._detail_label.setText(
+            detail_paras.append(
                 "No CUDA-capable GPU was detected. Processing will fall back to CPU execution. "
                 "The app remains fully functional, but neural rendering passes will take longer to complete."
             )
+
+            # Handle specific Windows missing driver check or non-Windows missing dll
+            if not cuda_dll_ok:
+                detail_paras.append(
+                    "⚠️ Missing Driver: The NVIDIA CUDA driver library (nvcuda.dll) was not found. "
+                    "If you have an NVIDIA graphics card, installing/updating the latest official NVIDIA drivers "
+                    "may enable GPU acceleration."
+                )
+
+            if ram_gb < 8.0:
+                detail_paras.append(
+                    f"⚠️ Critical Memory Warning: Your system has low physical RAM ({ram_gb:.1f} GB detected). "
+                    "Running heavy deep learning models on CPU with low memory can cause severe slowdowns, "
+                    "virtual memory thrashing, or application crashes. Close background tasks to free up memory."
+                )
+            else:
+                detail_paras.append(
+                    f"Your system has {ram_gb:.1f} GB of RAM, which is sufficient for local CPU rendering."
+                )
+
             logger.info("Hardware check result: No GPU detected, using CPU fallback.")
+
+        # PySide6 Plugin Warnings if they are missing/corrupted in PyInstaller builds
+        if not pyside_ok:
+            detail_paras.append(
+                "⚠️ PySide6 Plugins Diagnostic Warning: Missing or invalid PySide6 platform plugins detected. "
+                "This may cause user interface rendering or startup issues."
+            )
+
+        self._detail_label.setText("\n\n".join(detail_paras))
 
 
 class ModelDownloadPage(QWizardPage):
