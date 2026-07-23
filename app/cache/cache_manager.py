@@ -94,6 +94,96 @@ class CacheManager:
                 hasher.update(chunk)
         return hasher.hexdigest()
 
+    def verify_stem_wav(self, path: Path) -> bool:
+        """Verify the integrity of a cached stem WAV file.
+
+        Checks:
+        1. Path exists and is a file.
+        2. File size is greater than 0.
+        3. File is readable as a WAV using soundfile.
+        """
+        if not path.is_file():
+            return False
+        if path.stat().st_size == 0:
+            return False
+        try:
+            import soundfile as sf
+            sf.info(str(path))
+            return True
+        except Exception:
+            return False
+
+    def get_total_cache_size(self) -> int:
+        """Return total size of the cache root in bytes."""
+        total = 0
+        if not self._root.exists():
+            return 0
+        for p in self._root.rglob("*"):
+            if p.is_file():
+                try:
+                    total += p.stat().st_size
+                except Exception:
+                    pass
+        return total
+
+    def prune_cache(self, quota_bytes: int = 5 * 1024 * 1024 * 1024) -> None:
+        """Prune old track render folders and logs when total cache usage exceeds quota_bytes.
+
+        Candidate files to prune:
+        - Files under <track_id>/renders for any track.
+        - Files under the logs directory.
+
+        Sorted by modification time (oldest first). We keep deleting them until the total size
+        of the cache is <= quota_bytes or no candidates remain.
+        """
+        if self.get_total_cache_size() <= quota_bytes:
+            return
+
+        candidates = []
+
+        # 1. Collect log files
+        if self._logs_dir.is_dir():
+            for p in self._logs_dir.rglob("*"):
+                if p.is_file():
+                    try:
+                        candidates.append((p, p.stat().st_mtime))
+                    except Exception:
+                        pass
+
+        # 2. Collect render files
+        protected_dirs = {self.PRESETS_DIRNAME, self.LOGS_DIRNAME, self.MODELS_DIRNAME, self.BIN_DIRNAME}
+        if self._root.is_dir():
+            for track_dir in self._root.iterdir():
+                if track_dir.is_dir() and track_dir.name not in protected_dirs:
+                    renders_path = track_dir / self.RENDERS_DIRNAME
+                    if renders_path.is_dir():
+                        for p in renders_path.rglob("*"):
+                            if p.is_file():
+                                try:
+                                    candidates.append((p, p.stat().st_mtime))
+                                except Exception:
+                                    pass
+
+        # Sort candidate files by mtime (oldest first)
+        candidates.sort(key=lambda item: item[1])
+
+        # Delete candidates one by one until total size <= quota_bytes
+        for file_path, _ in candidates:
+            if self.get_total_cache_size() <= quota_bytes:
+                break
+            try:
+                file_path.unlink()
+                # If parent directory is empty and is a renders folder or under it, clean it up
+                parent = file_path.parent
+                while parent != self._root and parent != self._logs_dir:
+                    if parent.is_dir() and not any(parent.iterdir()):
+                        parent.rmdir()
+                        parent = parent.parent
+                    else:
+                        break
+            except Exception:
+                pass
+
     @staticmethod
     def _ensure_dir(path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
