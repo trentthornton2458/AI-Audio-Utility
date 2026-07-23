@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
+import soundfile as sf
 
 from app.core import separation
 
@@ -32,8 +34,10 @@ class _FakeSeparator:
             f"{base}_(Instrumental)_model_bs_roformer.wav",
             f"{base}_(Vocals)_model_bs_roformer.wav",
         ]
+        # Generate minimal valid WAV content (0.01 seconds, stereo, 44100Hz)
+        data = np.zeros((441, 2))
         for name in names:
-            (self._output_dir / name).write_bytes(b"RIFFfake")
+            sf.write(str(self._output_dir / name), data, 44100, subtype="PCM_24")
         return names
 
 
@@ -48,7 +52,9 @@ def cache_manager(tmp_path, monkeypatch):
 
 def _make_normalized(cache_manager, track_id: str = "trk") -> Path:
     norm = cache_manager.track_dir(track_id) / "normalized.wav"
-    norm.write_bytes(b"RIFFfake")
+    # Generate minimal valid WAV content (0.01 seconds, stereo, 44100Hz)
+    data = np.zeros((441, 2))
+    sf.write(str(norm), data, 44100, subtype="PCM_24")
     return norm
 
 
