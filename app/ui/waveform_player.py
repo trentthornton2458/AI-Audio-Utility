@@ -14,7 +14,7 @@ from typing import Optional, Union
 
 import numpy as np
 import soundfile as sf
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, QUrl, Signal, Slot
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QColor, QFont, QMouseEvent, QPaintEvent, QPainter, QPen
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
@@ -295,6 +295,13 @@ class WaveformPlayerWidget(QWidget):
         self._audio_output = QAudioOutput(self)
         self._media_player.setAudioOutput(self._audio_output)
 
+        self._target_volume: float = 1.0
+        self._muted_state: bool = False
+        self._fade_duration_ms: int = 50
+        self._fade_interval_ms: int = 10
+        self._fade_timer = QTimer(self)
+        self._fade_timer.timeout.connect(self._on_fade_tick)
+
         self.setObjectName("WaveformPlayerWidget")
         self._init_ui()
         self._wire_signals()
@@ -418,6 +425,12 @@ class WaveformPlayerWidget(QWidget):
         self._stop_button.setEnabled(False)
         self._update_time_label()
 
+        self._fade_timer.stop()
+        self._muted_state = False
+        self._target_volume = 1.0
+        self._audio_output.setVolume(1.0)
+        self._audio_output.setMuted(False)
+
     def play(self) -> None:
         if self._media_player.source().isValid():
             self._media_player.play()
@@ -443,12 +456,36 @@ class WaveformPlayerWidget(QWidget):
 
     def set_volume(self, volume: float) -> None:
         """Set playback volume from 0.0 to 1.0."""
-        vol_int = int(round(max(0.0, min(1.0, volume)) * 100))
+        self._target_volume = max(0.0, min(1.0, volume))
+        vol_int = int(round(self._target_volume * 100))
+
+        self._volume_slider.blockSignals(True)
         self._volume_slider.setValue(vol_int)
-        self._audio_output.setVolume(volume)
+        self._volume_slider.blockSignals(False)
+
+        if not self._muted_state:
+            if self._fade_duration_ms <= 0:
+                self._audio_output.setVolume(self._target_volume)
+            else:
+                self._fade_timer.start(self._fade_interval_ms)
 
     def set_muted(self, muted: bool) -> None:
-        self._audio_output.setMuted(muted)
+        if self._muted_state == muted:
+            return
+
+        self._muted_state = muted
+        if muted:
+            if self._fade_duration_ms <= 0:
+                self._audio_output.setVolume(0.0)
+                self._audio_output.setMuted(True)
+            else:
+                self._fade_timer.start(self._fade_interval_ms)
+        else:
+            self._audio_output.setMuted(False)
+            if self._fade_duration_ms <= 0:
+                self._audio_output.setVolume(self._target_volume)
+            else:
+                self._fade_timer.start(self._fade_interval_ms)
 
     def is_playing(self) -> bool:
         return self._media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
@@ -478,7 +515,28 @@ class WaveformPlayerWidget(QWidget):
     @Slot(int)
     def on_volume_changed(self, value: int) -> None:
         vol_float = value / 100.0
-        self._audio_output.setVolume(vol_float)
+        self.set_volume(vol_float)
+
+    @Slot()
+    def _on_fade_tick(self) -> None:
+        dest_volume = 0.0 if self._muted_state else self._target_volume
+        current_volume = self._audio_output.volume()
+
+        step = self._fade_interval_ms / max(1, self._fade_duration_ms)
+
+        if current_volume < dest_volume:
+            new_vol = min(dest_volume, current_volume + step)
+            self._audio_output.setVolume(new_vol)
+        elif current_volume > dest_volume:
+            new_vol = max(dest_volume, current_volume - step)
+            self._audio_output.setVolume(new_vol)
+
+        # Check if we reached the destination
+        if abs(self._audio_output.volume() - dest_volume) < 1e-5:
+            self._audio_output.setVolume(dest_volume)
+            self._fade_timer.stop()
+            if self._muted_state:
+                self._audio_output.setMuted(True)
 
     @Slot(int)
     def on_canvas_seek_requested(self, position_ms: int) -> None:

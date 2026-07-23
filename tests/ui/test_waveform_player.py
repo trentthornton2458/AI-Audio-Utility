@@ -143,6 +143,7 @@ def test_waveform_player_widget_controls_and_seeking(qtbot, tmp_path):
     player.set_volume(0.5)
     assert player._volume_slider.value() == 50
 
+    player._fade_duration_ms = 0
     player.set_muted(True)
     assert player._audio_output.isMuted() is True
 
