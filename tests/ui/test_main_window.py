@@ -37,9 +37,10 @@ def test_main_window_structure_and_title(qtbot):
     qtbot.addWidget(window)
 
     assert window.windowTitle() == "Music Mastery Enhancer"
-    assert window._tab_widget.count() == 2
+    assert window._tab_widget.count() == 3
     assert window._tab_widget.tabText(0) == "Stem Separation"
     assert window._tab_widget.tabText(1) == "Artifact Fixing & Mastering"
+    assert window._tab_widget.tabText(2) == "A/B Compare"
     assert isinstance(window._stem_separation_panel, StemSeparationPanel)
     assert isinstance(window._artifact_fixing_panel, ArtifactFixingPanel)
     assert window._status_label.text() == "Ready. Load a .wav or .mp3 track to begin."

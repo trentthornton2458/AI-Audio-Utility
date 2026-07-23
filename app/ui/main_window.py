@@ -33,6 +33,7 @@ from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
 from app.core.ingestion import UnsupportedAudioFormatError, load_and_normalize_track
 from app.models.preset import Preset
+from app.ui.ab_compare_view import ABCompareView
 from app.workers.render_job import RenderJob
 
 logger = get_logger(__name__)
@@ -298,9 +299,11 @@ class MainWindow(QMainWindow):
         self._stem_separation_panel = StemSeparationPanel()
         self._artifact_fixing_panel = ArtifactFixingPanel()
         self._artifact_fixing_panel.renderRequested.connect(self.on_render_requested)
+        self._ab_compare_view = ABCompareView()
 
         self._tab_widget.addTab(self._stem_separation_panel, "Stem Separation")
         self._tab_widget.addTab(self._artifact_fixing_panel, "Artifact Fixing & Mastering")
+        self._tab_widget.addTab(self._ab_compare_view, "A/B Compare")
         main_layout.addWidget(self._tab_widget)
 
         # Status bar setup
@@ -359,6 +362,7 @@ class MainWindow(QMainWindow):
             self._file_load_panel.set_track_info(input_path, normalized_path)
             self._stem_separation_panel.set_track_loaded(normalized_path)
             self._artifact_fixing_panel.set_render_enabled(True)
+            self._ab_compare_view.load_original(normalized_path)
 
             self._status_label.setText(f"Track ingested and normalized: {normalized_path.name}")
             logger.info("Track successfully normalized: %s", normalized_path)
@@ -424,6 +428,7 @@ class MainWindow(QMainWindow):
         self._progress_bar.setVisible(False)
         self._cancel_button.setVisible(False)
         self._artifact_fixing_panel.set_render_enabled(True)
+        self._ab_compare_view.load_cleaned(output_path)
         self._active_render_job = None
 
         QMessageBox.information(
