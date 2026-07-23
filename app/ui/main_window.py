@@ -299,7 +299,7 @@ class MainWindow(QMainWindow):
         self._stem_separation_panel = StemSeparationPanel()
         self._artifact_fixing_panel = ArtifactFixingPanel()
         self._artifact_fixing_panel.renderRequested.connect(self.on_render_requested)
-        self._ab_compare_view = ABCompareView()
+        self._ab_compare_view = ABCompareView(cache_manager=self._cache_manager)
 
         self._tab_widget.addTab(self._stem_separation_panel, "Stem Separation")
         self._tab_widget.addTab(self._artifact_fixing_panel, "Artifact Fixing & Mastering")
@@ -363,6 +363,7 @@ class MainWindow(QMainWindow):
             self._stem_separation_panel.set_track_loaded(normalized_path)
             self._artifact_fixing_panel.set_render_enabled(True)
             self._ab_compare_view.load_original(normalized_path)
+            self._ab_compare_view.set_track_id(normalized_path.parent.name)
 
             self._status_label.setText(f"Track ingested and normalized: {normalized_path.name}")
             logger.info("Track successfully normalized: %s", normalized_path)
@@ -429,6 +430,7 @@ class MainWindow(QMainWindow):
         self._cancel_button.setVisible(False)
         self._artifact_fixing_panel.set_render_enabled(True)
         self._ab_compare_view.load_cleaned(output_path)
+        self._ab_compare_view.refresh_history()
         self._active_render_job = None
 
         QMessageBox.information(

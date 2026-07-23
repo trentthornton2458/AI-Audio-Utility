@@ -71,6 +71,13 @@ class CacheManager:
         self._ensure_dir(path)
         return path
 
+    def clear_track_cache(self, track_id: str) -> None:
+        """Delete all cached files (stems, renders, etc.) for a given track."""
+        path = self._root / track_id
+        if path.exists():
+            import shutil
+            shutil.rmtree(path)
+
     @staticmethod
     def compute_track_id(file_path: Path, chunk_size: int = 1024 * 1024) -> str:
         """Compute a stable sha256 hash of a file's content, used as its track_id."""
@@ -83,3 +90,4 @@ class CacheManager:
     @staticmethod
     def _ensure_dir(path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
+

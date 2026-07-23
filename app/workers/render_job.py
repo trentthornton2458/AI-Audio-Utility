@@ -4,7 +4,10 @@ cancellation support."""
 
 from __future__ import annotations
 
+import json
 import time
+from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -133,7 +136,24 @@ class RenderJob(QThread):
         self._checkpoint()
 
         output_path = self._resolve_output_path(track_id, cache_manager)
-        return remix_master.export_wav(mastered, sample_rate, output_path)
+        exported_path = remix_master.export_wav(mastered, sample_rate, output_path)
+        self._write_metadata(exported_path, track_id)
+        return exported_path
+
+    def _write_metadata(self, render_path: Path, track_id: str) -> None:
+        try:
+            metadata = {
+                "timestamp": datetime.now().isoformat(),
+                "track_id": track_id,
+                "render_file": render_path.name,
+                "preset": asdict(self._preset),
+            }
+            json_path = render_path.with_suffix(".json")
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2)
+            logger.info("Wrote render metadata to %s", json_path)
+        except Exception as exc:
+            logger.warning("Failed to write render metadata for %s: %s", render_path, exc)
 
     def _process_vocal(
         self,

@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** AI Audio Utility
-> **Last Updated:** 2026-07-23T03:16:34.665Z
+> **Last Updated:** 2026-07-23T03:18:48.629Z
 
 ---
 
@@ -94,8 +94,8 @@ None specified.
 - [x] **#23: Build vocal control panel** [antigravity] (Commit: c245d6e)
 - [x] **#24: Build instrumental control panel** [antigravity] (Commit: 72becc6)
 - [ ] **#25: Test control panel state and signal emission** [jules] 
-- [/] **#26: Build waveform A/B player widget** [antigravity] 
-- [ ] **#27: Build render history panel** [antigravity] 
+- [x] **#26: Build waveform A/B player widget** [antigravity] (Commit: 5336fb4)
+- [/] **#27: Build render history panel** [antigravity] 
 - [ ] **#28: Test waveform rendering and render history behavior** [jules] 
 - [ ] **#29: Configure PyInstaller build and Inno Setup script** [claude] 
 - [ ] **#30: Bug sweep on packaged build and first-run flow** [jules] 

@@ -24,16 +24,23 @@ from PySide6.QtWidgets import (
 )
 
 from app.cache import get_logger
+from app.cache.cache_manager import CacheManager
+from app.ui.render_history_panel import RenderHistoryPanel
 from app.ui.waveform_player import WaveformPlayerWidget
 
 logger = get_logger(__name__)
 
 
 class ABCompareView(QWidget):
-    """Side-by-side A/B Comparison View hosting Original vs Cleaned audio players."""
+    """Side-by-side A/B Comparison View hosting Original vs Cleaned audio players and Render History."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        cache_manager: Optional[CacheManager] = None,
+    ) -> None:
         super().__init__(parent)
+        self._cache_manager = cache_manager or CacheManager()
         self._syncing_seek = False
         self._original_path: Optional[Path] = None
         self._cleaned_path: Optional[Path] = None
@@ -137,11 +144,24 @@ class ABCompareView(QWidget):
 
         main_layout.addLayout(players_layout)
 
+        # Render History Panel
+        self._render_history_panel = RenderHistoryPanel(cache_manager=self._cache_manager)
+        main_layout.addWidget(self._render_history_panel)
+
     def _wire_events(self) -> None:
         self._original_player.seekRequested.connect(self.on_original_seek)
         self._cleaned_player.seekRequested.connect(self.on_cleaned_seek)
+        self._render_history_panel.renderSelected.connect(self.load_cleaned)
 
     # --- Public API Methods ---
+
+    def set_track_id(self, track_id: Optional[str]) -> None:
+        """Set active track_id for render history panel."""
+        self._render_history_panel.set_track_id(track_id)
+
+    def refresh_history(self) -> None:
+        """Refresh render history panel."""
+        self._render_history_panel.refresh_history()
 
     def load_original(self, file_path: Union[Path, str]) -> None:
         """Load original ingested track into Original player."""
