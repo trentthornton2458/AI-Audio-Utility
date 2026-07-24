@@ -226,3 +226,25 @@ def test_waveform_player_widget_accessibility(qtbot):
     assert player._stop_button.accessibleName() == "Stop"
     assert player._volume_slider.accessibleName() == "Volume"
     assert player._canvas.focusPolicy() == Qt.FocusPolicy.StrongFocus
+
+
+def test_waveform_player_widget_space_shortcut(qtbot, tmp_path):
+    player = WaveformPlayerWidget(title="Space Player")
+    qtbot.addWidget(player)
+
+    wav_path = tmp_path / "sample.wav"
+    sf.write(str(wav_path), np.sin(np.linspace(0, 10, 44100)), 44100)
+    player.load_file(wav_path)
+
+    # Check that the shortcut exists and is correctly configured
+    assert hasattr(player, "_play_shortcut")
+    assert player._play_shortcut.key().toString() == "Space"
+    assert player._play_shortcut.context() == Qt.ShortcutContext.WidgetWithChildrenShortcut
+
+    # Mock the play call/state
+    player.play = MagicMock()
+
+    # Trigger the shortcut directly
+    player._play_shortcut.activated.emit()
+
+    assert player.play.call_count == 1

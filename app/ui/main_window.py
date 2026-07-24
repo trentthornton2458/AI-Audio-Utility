@@ -75,6 +75,9 @@ class FileLoadPanel(QFrame):
         self._browse_button = QPushButton("Browse Audio File...")
         self._browse_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._browse_button.setMinimumWidth(180)
+        self._browse_button.setToolTip("Open file browser to select an audio file")
+        self._browse_button.setAccessibleName("Browse Audio File")
+        self._browse_button.setAccessibleDescription("Opens a file dialog to select a Suno track in WAV or MP3 format.")
         self._browse_button.clicked.connect(self.on_browse_clicked)
         button_layout.addWidget(self._browse_button)
 
@@ -195,6 +198,11 @@ class StemSeparationPanel(QWidget):
         # Explicit Extract Stems action button
         self._extract_button = QPushButton("✂️  Extract Stems")
         self._extract_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._extract_button.setToolTip("Separate the audio track into vocal and instrumental stems")
+        self._extract_button.setAccessibleName("Extract Stems")
+        self._extract_button.setAccessibleDescription(
+            "Extracts separate vocal and instrumental tracks from the selected file using the BS-RoFormer model."
+        )
         self._extract_button.setStyleSheet(
             "QPushButton { background-color: #6c5ce7; color: white; font-weight: bold; font-size: 14px; padding: 10px 20px; border-radius: 6px; margin-top: 10px; }"
             "QPushButton:hover { background-color: #7d6dfa; }"
@@ -306,6 +314,11 @@ class MainWindow(QMainWindow):
 
         self._render_button = QPushButton("⚡  Render & Master Track")
         self._render_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._render_button.setToolTip("Start vocal/instrumental processing and master the combined output")
+        self._render_button.setAccessibleName("Render and Master Track")
+        self._render_button.setAccessibleDescription(
+            "Applies selected neural cleanup, DSP processing, and LUFS mastering to render the final audio track."
+        )
         self._render_button.setStyleSheet(
             "QPushButton { background-color: #00b894; color: white; font-weight: bold; font-size: 14px; padding: 10px 20px; border-radius: 6px; }"
             "QPushButton:hover { background-color: #00cec9; }"
@@ -332,6 +345,9 @@ class MainWindow(QMainWindow):
 
         self._cancel_button = QPushButton("Cancel Render")
         self._cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._cancel_button.setToolTip("Cancel the active render or separation task")
+        self._cancel_button.setAccessibleName("Cancel Render")
+        self._cancel_button.setAccessibleDescription("Stops and cancels the current running render or separation background job.")
         self._cancel_button.setStyleSheet("background-color: #d63031; color: white; padding: 2px 8px; border-radius: 4px;")
         self._cancel_button.setVisible(False)
         self._cancel_button.clicked.connect(self.on_cancel_render_clicked)
