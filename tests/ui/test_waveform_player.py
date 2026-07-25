@@ -180,6 +180,7 @@ def test_waveform_canvas_interaction(qtbot):
 
 def test_waveform_canvas_keyboard_seeking(qtbot):
     from PySide6.QtGui import QKeyEvent
+
     canvas = WaveformCanvas()
     qtbot.addWidget(canvas)
     canvas.resize(200, 100)
@@ -192,26 +193,34 @@ def test_waveform_canvas_keyboard_seeking(qtbot):
 
     # Check key navigation (Right arrow key -> +5s -> 15s)
     with qtbot.waitSignal(canvas.seekRequested, timeout=1000) as blocker:
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.NoModifier
+        )
         canvas.keyPressEvent(event)
     assert blocker.args[0] == 15000
 
     # Check Left arrow key (Left arrow key -> -5s -> 5s)
     with qtbot.waitSignal(canvas.seekRequested, timeout=1000) as blocker:
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Left, Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_Left, Qt.KeyboardModifier.NoModifier
+        )
         canvas.keyPressEvent(event)
     assert blocker.args[0] == 5000
 
     # Check PageDown key (+15s -> 25s)
     with qtbot.waitSignal(canvas.seekRequested, timeout=1000) as blocker:
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_PageDown, Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_PageDown, Qt.KeyboardModifier.NoModifier
+        )
         canvas.keyPressEvent(event)
     assert blocker.args[0] == 25000
 
     # Check PageUp key (-15s -> 0s)
     canvas.set_playhead_position(10000)
     with qtbot.waitSignal(canvas.seekRequested, timeout=1000) as blocker:
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_PageUp, Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_PageUp, Qt.KeyboardModifier.NoModifier
+        )
         canvas.keyPressEvent(event)
     assert blocker.args[0] == 0
 
@@ -239,7 +248,9 @@ def test_waveform_player_widget_space_shortcut(qtbot, tmp_path):
     # Check that the shortcut exists and is correctly configured
     assert hasattr(player, "_play_shortcut")
     assert player._play_shortcut.key().toString() == "Space"
-    assert player._play_shortcut.context() == Qt.ShortcutContext.WidgetWithChildrenShortcut
+    assert (
+        player._play_shortcut.context() == Qt.ShortcutContext.WidgetWithChildrenShortcut
+    )
 
     # Mock the play call/state
     player.play = MagicMock()
@@ -248,3 +259,42 @@ def test_waveform_player_widget_space_shortcut(qtbot, tmp_path):
     player._play_shortcut.activated.emit()
 
     assert player.play.call_count == 1
+
+
+def test_waveform_player_widget_mute_unmute(qtbot):
+    player = WaveformPlayerWidget(title="Mute Player")
+    qtbot.addWidget(player)
+
+    # Check initial states
+    assert player._mute_button.text() == "🔊"
+    assert player._mute_button.toolTip() == "Mute audio"
+    assert player._mute_button.accessibleName() == "Mute"
+    assert player._muted_state is False
+
+    # Simulate clicking mute button
+    player._mute_button.click()
+
+    # Verify muted state and button UI updates
+    assert player._muted_state is True
+    assert player._mute_button.text() == "🔇"
+    assert player._mute_button.toolTip() == "Unmute audio"
+    assert player._mute_button.accessibleName() == "Unmute"
+
+    # Click again to unmute
+    player._mute_button.click()
+
+    assert player._muted_state is False
+    assert player._mute_button.text() == "🔊"
+    assert player._mute_button.toolTip() == "Mute audio"
+    assert player._mute_button.accessibleName() == "Mute"
+
+    # Set muted and then clear to verify it resets
+    player.set_muted(True)
+    assert player._muted_state is True
+    assert player._mute_button.text() == "🔇"
+
+    player.clear()
+    assert player._muted_state is False
+    assert player._mute_button.text() == "🔊"
+    assert player._mute_button.toolTip() == "Mute audio"
+    assert player._mute_button.accessibleName() == "Mute"
