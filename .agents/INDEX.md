@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** Music Enhancer
-> **Last Updated:** 2026-07-26T07:07:36.202Z
+> **Last Updated:** 2026-07-26T07:43:12.323Z
 
 ---
 
@@ -124,8 +124,8 @@ None specified.
 - [ ] **#5: Milestone Review: Milestone 2: Humanizer DSP stage (pitch drift + breath blend-back)** [jules] 
 - [x] **#6: Add pitch-variance, HF-energy, and crest-factor QA metrics** [claude] (Commit: 3bb88e2)
 - [x] **#7: Surface QA warnings as a caution badge in vocal_panel.py** [antigravity] (Commit: 89ce8a0)
-- [/] **#7: Milestone Review: Milestone 3: QA gate metric additions** [jules] 
-- [ ] **#8: Create factory reference asset loading + fallback logic** [claude] 
+- [x] **#7: Milestone Review: Milestone 3: QA gate metric additions** [jules] (Commit: 1e5f047)
+- [/] **#8: Create factory reference asset loading + fallback logic** [claude] 
 - [ ] **#9: First-run fallback modal for missing reference assets** [antigravity] 
 - [ ] **#10: Extend A/B compare UI with Raw / Humanized / Reference blind toggle** [antigravity] 
 - [ ] **#11: Add stubbed voice-conversion config field** [claude] 

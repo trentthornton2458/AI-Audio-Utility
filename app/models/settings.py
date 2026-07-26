@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
 from app.models.preset import Preset
 
 
 @dataclass
 class Settings(Preset):
     """Pipeline runtime settings object consumed by RenderJob."""
+
+    # Global user preference (not part of Preset/PRESET_SCHEMA -- it's not per-track or
+    # per-preset, so it's deliberately excluded from from_preset/to_preset below and from
+    # Preset's JSON schema/persistence). If set, app.core.reference_assets.get_reference_stems
+    # resolves the 4 male/female x dry/tuned A/B reference stems from this directory instead of
+    # the bundled /assets/factory_references/ files, per Counsel's Milestone 4 spec.
+    custom_reference_override_path: Optional[Path] = None
 
     @classmethod
     def from_preset(cls, preset: Preset) -> Settings:
