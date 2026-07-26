@@ -181,3 +181,100 @@ def test_vocal_panel_preset_loading_and_saving(qtbot, tmp_path):
             p_file = presets_dir / f"{p_name}.json"
             if p_file.is_file():
                 p_file.unlink()
+
+
+def test_vocal_panel_qa_badge_hidden_by_default(qtbot):
+    mock_cache = MagicMock(spec=CacheManager)
+    with patch("app.core.presets.list_presets", return_value=[]):
+        panel = VocalPanel(cache_manager=mock_cache)
+        qtbot.addWidget(panel)
+        panel.show()
+
+    assert panel._qa_badge.isHidden() is True
+    assert panel._qa_details_panel.isHidden() is True
+
+
+def test_vocal_panel_qa_badge_shows_on_warning_and_toggles_details(qtbot):
+    mock_cache = MagicMock(spec=CacheManager)
+    with patch("app.core.presets.list_presets", return_value=[]):
+        panel = VocalPanel(cache_manager=mock_cache)
+        qtbot.addWidget(panel)
+        panel.show()
+
+    from app.core.qa_gate import QAMetricResult
+
+    qa_results = {
+        "pitch_variance": QAMetricResult(value=4.5, warning=True, reason="flat_or_hard_quantized_pitch"),
+        "hf_energy": QAMetricResult(value=0.05, warning=False, reason=""),
+        "crest_factor": QAMetricResult(value=5.0, warning=True, reason="over_compressed"),
+    }
+
+    panel.set_qa_metric_results(qa_results)
+
+    assert panel._qa_badge.isHidden() is False
+    assert "2 signal quality metrics flagged" in panel._qa_badge.text()
+    tooltip = panel._qa_badge.toolTip()
+    assert "Pitch Variance" in tooltip
+    assert "Crest Factor" in tooltip
+
+    # Export / Apply button must stay enabled and non-blocked
+    assert panel._apply_button.isEnabled() is True
+
+    # Details panel is hidden until badge is clicked
+    assert panel._qa_details_panel.isHidden() is True
+
+    # Click badge to toggle expandable panel
+    qtbot.mouseClick(panel._qa_badge, Qt.MouseButton.LeftButton)
+    assert panel._qa_details_panel.isHidden() is False
+    details_text = panel._qa_details_label.text()
+    assert "Pitch Variance" in details_text
+    assert "Crest Factor" in details_text
+
+    # Click badge again to collapse
+    qtbot.mouseClick(panel._qa_badge, Qt.MouseButton.LeftButton)
+    assert panel._qa_details_panel.isHidden() is True
+
+
+def test_vocal_panel_qa_badge_hidden_when_no_warnings(qtbot):
+    mock_cache = MagicMock(spec=CacheManager)
+    with patch("app.core.presets.list_presets", return_value=[]):
+        panel = VocalPanel(cache_manager=mock_cache)
+        qtbot.addWidget(panel)
+        panel.show()
+
+    from app.core.qa_gate import QAMetricResult
+
+    qa_results = {
+        "pitch_variance": QAMetricResult(value=15.0, warning=False, reason=""),
+        "hf_energy": QAMetricResult(value=0.05, warning=False, reason=""),
+        "crest_factor": QAMetricResult(value=10.0, warning=False, reason=""),
+    }
+
+    panel.set_qa_metric_results(qa_results)
+
+    assert panel._qa_badge.isHidden() is True
+    assert panel._qa_details_panel.isHidden() is True
+
+
+def test_vocal_panel_update_qa_from_file(qtbot, tmp_path):
+    import numpy as np
+    import soundfile as sf
+
+    mock_cache = MagicMock(spec=CacheManager)
+    with patch("app.core.presets.list_presets", return_value=[]):
+        panel = VocalPanel(cache_manager=mock_cache)
+        qtbot.addWidget(panel)
+        panel.show()
+
+    # Pure tone -> low pitch variance -> warning expected
+    sr = 22050
+    t = np.linspace(0, 1.0, sr, endpoint=False)
+    pure_tone = (0.5 * np.sin(2 * np.pi * 220 * t)).astype(np.float64)
+    audio_path = tmp_path / "test_render.wav"
+    sf.write(str(audio_path), pure_tone, sr, subtype="PCM_24")
+
+    res = panel.update_qa_from_file(audio_path)
+    assert "pitch_variance" in res
+    assert res["pitch_variance"].warning is True
+    assert panel._qa_badge.isHidden() is False
+

@@ -14,8 +14,11 @@ Provides granular control over vocal stem cleaning and processing:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
+import numpy as np
+import soundfile as sf
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -35,7 +38,8 @@ from PySide6.QtWidgets import (
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
-from app.core import presets
+from app.core import presets, qa_gate
+from app.core.qa_gate import QAMetricResult
 from app.models.preset import Preset
 from app.models.settings import Settings
 
@@ -338,6 +342,39 @@ class VocalPanel(QWidget):
 
         main_layout.addWidget(dsp_group)
 
+        # QA Caution Badge & Expandable Details Panel (warn, never block)
+        qa_layout = QVBoxLayout()
+        qa_layout.setContentsMargins(0, 0, 0, 0)
+        qa_layout.setSpacing(6)
+
+        self._qa_badge = QPushButton("⚠️ QA Caution")
+        self._qa_badge.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._qa_badge.setStyleSheet(
+            "QPushButton { background-color: #3a2e19; color: #fdcb6e; border: 1px solid #e1b12c; border-radius: 6px; padding: 8px 14px; font-weight: bold; font-size: 12px; text-align: left; }"
+            "QPushButton:hover { background-color: #4d3d20; border-color: #f1c40f; }"
+        )
+        self._qa_badge.setVisible(False)
+        self._qa_badge.clicked.connect(self._toggle_qa_details)
+        qa_layout.addWidget(self._qa_badge)
+
+        self._qa_details_panel = QFrame()
+        self._qa_details_panel.setStyleSheet(
+            "QFrame { background-color: #1e1f2b; border: 1px solid #e1b12c; border-radius: 8px; padding: 10px; }"
+        )
+        qa_details_inner = QVBoxLayout(self._qa_details_panel)
+        qa_details_inner.setContentsMargins(8, 8, 8, 8)
+        qa_details_inner.setSpacing(6)
+
+        self._qa_details_label = QLabel()
+        self._qa_details_label.setWordWrap(True)
+        self._qa_details_label.setStyleSheet("color: #e1e2e6; font-size: 12px;")
+        qa_details_inner.addWidget(self._qa_details_label)
+
+        self._qa_details_panel.setVisible(False)
+        qa_layout.addWidget(self._qa_details_panel)
+
+        main_layout.addLayout(qa_layout)
+
         # Apply / Render Action Button
         action_layout = QHBoxLayout()
         action_layout.setContentsMargins(0, 8, 0, 0)
@@ -505,6 +542,109 @@ class VocalPanel(QWidget):
 
     @Slot()
     def on_apply_clicked(self) -> None:
+        self.clear_qa_warning()
         settings = self.get_settings()
         logger.info("Apply / Render clicked on VocalPanel with settings: %s", settings)
         self.renderRequested.emit(settings)
+
+    # --- QA Metric Surfacing & Caution Badge ---
+
+    @Slot()
+    def _toggle_qa_details(self) -> None:
+        """Toggle visibility of the expandable QA metric details panel."""
+        self._qa_details_panel.setVisible(not self._qa_details_panel.isVisible())
+
+    def update_qa_from_file(self, file_path: Path | str, silence_threshold_db: float = -30.0) -> dict[str, QAMetricResult]:
+        """Run app.core.qa_gate warn-only metrics on a rendered audio file and surface caution badge if flagged."""
+        try:
+            audio, samplerate = sf.read(str(file_path), always_2d=True, dtype="float64")
+            return self.update_qa_metrics(audio, samplerate, silence_threshold_db=silence_threshold_db)
+        except Exception as exc:
+            logger.warning("Failed to evaluate QA metrics for %s: %s", file_path, exc)
+            self.clear_qa_warning()
+            return {}
+
+    def update_qa_metrics(
+        self,
+        audio: np.ndarray,
+        samplerate: int,
+        silence_threshold_db: float = -30.0,
+    ) -> dict[str, QAMetricResult]:
+        """Evaluate the three warn-only QA metrics on audio array and update caution badge state."""
+        pitch_res = qa_gate.measure_pitch_variance(audio, samplerate)
+        hf_res = qa_gate.measure_high_frequency_energy(audio, samplerate, silence_threshold_db=silence_threshold_db)
+        crest_res = qa_gate.measure_crest_factor(audio)
+
+        results = {
+            "pitch_variance": pitch_res,
+            "hf_energy": hf_res,
+            "crest_factor": crest_res,
+        }
+        self.set_qa_metric_results(results)
+        return results
+
+    def set_qa_metric_results(self, results: dict[str, QAMetricResult]) -> None:
+        """Set QA metric results directly and update the caution badge state."""
+        self._last_qa_results = results
+        warning_items = [(name, res) for name, res in results.items() if res.warning]
+
+        if not warning_items:
+            self.clear_qa_warning()
+            return
+
+        count = len(warning_items)
+        plural = "s" if count > 1 else ""
+        self._qa_badge.setText(f"⚠️ QA Caution: {count} signal quality metric{plural} flagged (click for details)")
+
+        tooltip_lines = ["⚠️ Audio Quality Caution (Warn Only):"]
+        details_lines = [
+            "<b>⚠️ Audio Quality Caution (Informational Only):</b><br>"
+            "<span style='color: #a0a5b5;'>The following signal quality metric(s) triggered warning flags after render:</span><br>"
+        ]
+
+        for name, res in results.items():
+            if name == "pitch_variance":
+                label = "Pitch Variance"
+                val_str = f"{res.value:.1f} cents"
+                thresh_str = f"≤ {qa_gate.PITCH_VARIANCE_WARN_CENTS_MAX:.1f} cents"
+                desc = "Pitch is flat or hard-quantized rather than having natural micro-drift."
+            elif name == "hf_energy":
+                label = "HF / Breath Energy"
+                val_str = f"{res.value * 100:.2f}% ({res.value:.4f})"
+                thresh_str = f"≤ {qa_gate.HF_ENERGY_WARN_RATIO_MAX * 100:.1f}% ({qa_gate.HF_ENERGY_WARN_RATIO_MAX:.3f})"
+                desc = "High-frequency breath detail stripped in quiet passages."
+            elif name == "crest_factor":
+                label = "Crest Factor"
+                val_str = f"{res.value:.1f} dB"
+                thresh_str = f"≤ {qa_gate.CREST_FACTOR_WARN_DB_MIN:.1f} dB"
+                desc = "Signal peak-to-RMS is low (over-compressed or brickwalled)."
+            else:
+                label = name
+                val_str = str(res.value)
+                thresh_str = ""
+                desc = res.reason
+
+            status = "⚠️ WARN" if res.warning else "✓ OK"
+            status_color = "#ff7675" if res.warning else "#55efc4"
+
+            tooltip_lines.append(f"• [{status}] {label}: {val_str} (warn limit: {thresh_str})")
+            if res.warning:
+                tooltip_lines.append(f"  Reason: {desc}")
+
+            details_lines.append(
+                f"<div style='margin-top: 4px;'>"
+                f"<b style='color: {status_color};'>[{status}] {label}:</b> {val_str} "
+                f"<span style='color: #8a8d9b;'>(threshold: {thresh_str})</span><br>"
+                f"<span style='color: #d0d3e0; font-size: 11px;'>{desc}</span>"
+                f"</div>"
+            )
+
+        self._qa_badge.setToolTip("\n".join(tooltip_lines))
+        self._qa_details_label.setText("".join(details_lines))
+        self._qa_badge.setVisible(True)
+
+    def clear_qa_warning(self) -> None:
+        """Hide caution badge and details panel."""
+        self._last_qa_results = {}
+        self._qa_badge.setVisible(False)
+        self._qa_details_panel.setVisible(False)

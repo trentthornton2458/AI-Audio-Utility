@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** Music Enhancer
-> **Last Updated:** 2026-07-26T07:00:37.901Z
+> **Last Updated:** 2026-07-26T07:05:37.132Z
 
 ---
 
@@ -122,8 +122,8 @@ None specified.
 - [x] **#4: Implement automatic breath/noise blend-back** [claude] (Commit: c4a0758)
 - [x] **#5: Insert Humanizer stage into vocal_chain.py pipeline** [claude] (Commit: bd3b23c)
 - [ ] **#5: Milestone Review: Milestone 2: Humanizer DSP stage (pitch drift + breath blend-back)** [jules] 
-- [/] **#6: Add pitch-variance, HF-energy, and crest-factor QA metrics** [claude] 
-- [ ] **#7: Surface QA warnings as a caution badge in vocal_panel.py** [antigravity] 
+- [x] **#6: Add pitch-variance, HF-energy, and crest-factor QA metrics** [claude] (Commit: 3bb88e2)
+- [/] **#7: Surface QA warnings as a caution badge in vocal_panel.py** [antigravity] 
 - [ ] **#8: Create factory reference asset loading + fallback logic** [claude] 
 - [ ] **#9: First-run fallback modal for missing reference assets** [antigravity] 
 - [ ] **#10: Extend A/B compare UI with Raw / Humanized / Reference blind toggle** [antigravity] 

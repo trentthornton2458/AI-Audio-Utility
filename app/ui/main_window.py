@@ -653,6 +653,7 @@ class MainWindow(QMainWindow):
         self._render_button.setEnabled(True)
         self._ab_compare_view.load_cleaned(output_path)
         self._ab_compare_view.refresh_history()
+        self._vocal_panel.update_qa_from_file(output_path)
         self._active_render_job = None
 
         QMessageBox.information(
