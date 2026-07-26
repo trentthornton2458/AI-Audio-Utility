@@ -59,6 +59,32 @@ class ModelSpec:
 REQUIRED_MODEL_SPECS: tuple[ModelSpec, ...] = ()
 
 
+# --- Rubberband CLI binary (native executable used by pyrubberband for pitch/time-stretching) ---
+#
+# This is a small native CLI tool, not a neural checkpoint, so it's provisioned separately from
+# REQUIRED_MODEL_SPECS above and installed under CacheManager.bin_dir rather than models_dir. It's
+# GPL-licensed, so it's fetched on demand here instead of bundled in the installer.
+RUBBERBAND_BIN_FILENAME = "rubberband.exe"
+RUBBERBAND_WINDOWS_URL = (
+    "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows/rubberband.exe"
+)
+# TODO: pin to the real sha256 of the chosen release asset before shipping the Humanizer feature.
+RUBBERBAND_WINDOWS_SHA256 = "0" * 64
+
+
+class RubberbandDownloadError(Exception):
+    """Raised when the rubberband CLI binary cannot be downloaded or fails checksum verification."""
+
+    def __init__(self, reason: str, *, retryable: bool = True) -> None:
+        self.reason = reason
+        self.retryable = retryable
+        super().__init__(f"Failed to download rubberband binary: {reason}")
+
+
+class RubberbandBinaryNotFoundError(Exception):
+    """Raised by get_rubberband_binary_path when the rubberband CLI hasn't been downloaded yet."""
+
+
 class ModelDownloader:
     """Downloads required neural model weights into cache_root/models with progress + checksum verification."""
 
@@ -162,3 +188,93 @@ class ModelDownloader:
     def _cleanup(path: Path) -> None:
         if path.is_file():
             path.unlink(missing_ok=True)
+
+
+def download_rubberband_binary(
+    cache_manager: Optional[CacheManager] = None,
+    progress_callback: Optional[Callable[[str, float], None]] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
+) -> Path:
+    """Download (or reuse) the rubberband CLI binary into cache_manager.bin_dir.
+
+    Mirrors ModelDownloader's progress + checksum-verify flow, plus is_cancelled support so it
+    can be driven from a cancellable background worker like other setup-wizard download steps.
+
+    progress_callback, if given, is invoked with ("Rubberband CLI", fraction_complete) as bytes
+    stream in, fraction_complete in [0.0, 1.0]. Raises RubberbandDownloadError on network
+    failure, cancellation, or checksum mismatch.
+    """
+    cache_mgr = cache_manager or CacheManager()
+    destination = cache_mgr.bin_dir / RUBBERBAND_BIN_FILENAME
+    name = "Rubberband CLI"
+
+    def _report(fraction: float) -> None:
+        if progress_callback:
+            progress_callback(name, fraction)
+
+    if destination.is_file() and ModelDownloader._matches_checksum(destination, RUBBERBAND_WINDOWS_SHA256):
+        logger.info("Rubberband binary already present and verified at %s; skipping download", destination)
+        _report(1.0)
+        return destination
+
+    if is_cancelled and is_cancelled():
+        raise RubberbandDownloadError("cancelled before download started", retryable=True)
+
+    logger.info("Downloading rubberband binary from %s", RUBBERBAND_WINDOWS_URL)
+    _report(0.0)
+
+    tmp_path = destination.with_name(destination.name + PART_SUFFIX)
+    request = urllib.request.Request(RUBBERBAND_WINDOWS_URL, headers={"User-Agent": "MusicMasteryEnhancer/1.0"})
+    try:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            total_bytes = ModelDownloader._content_length(response)
+            downloaded_bytes = 0
+            with open(tmp_path, "wb") as out_file:
+                while True:
+                    if is_cancelled and is_cancelled():
+                        raise InterruptedError("Rubberband binary download cancelled")
+                    chunk = response.read(DOWNLOAD_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    out_file.write(chunk)
+                    downloaded_bytes += len(chunk)
+                    _report(ModelDownloader._fraction(downloaded_bytes, total_bytes))
+    except InterruptedError as exc:
+        ModelDownloader._cleanup(tmp_path)
+        raise RubberbandDownloadError("cancelled during download", retryable=True) from exc
+    except urllib.error.URLError as exc:
+        ModelDownloader._cleanup(tmp_path)
+        raise RubberbandDownloadError(f"network error while downloading: {exc}", retryable=True) from exc
+    except OSError as exc:
+        ModelDownloader._cleanup(tmp_path)
+        raise RubberbandDownloadError(f"local I/O error while downloading: {exc}", retryable=True) from exc
+
+    if not ModelDownloader._matches_checksum(tmp_path, RUBBERBAND_WINDOWS_SHA256):
+        ModelDownloader._cleanup(tmp_path)
+        raise RubberbandDownloadError(
+            f"checksum mismatch after download (expected sha256={RUBBERBAND_WINDOWS_SHA256}); "
+            "the file may be corrupt or the source may have changed",
+            retryable=True,
+        )
+
+    shutil.move(str(tmp_path), str(destination))
+    logger.info("Downloaded and verified rubberband binary -> %s", destination)
+    _report(1.0)
+    return destination
+
+
+def get_rubberband_binary_path(cache_manager: Optional[CacheManager] = None) -> Path:
+    """Locate the installed rubberband CLI binary for pyrubberband to invoke.
+
+    Raises RubberbandBinaryNotFoundError if it hasn't been downloaded yet (e.g. the user skipped
+    that step in the setup wizard), so callers get a clear, actionable error instead of
+    pyrubberband failing deep inside a subprocess call.
+    """
+    cache_mgr = cache_manager or CacheManager()
+    path = cache_mgr.bin_dir / RUBBERBAND_BIN_FILENAME
+    if not path.is_file():
+        raise RubberbandBinaryNotFoundError(
+            f"rubberband binary not found at {path}; run the setup wizard's rubberband download "
+            "step (or call download_rubberband_binary()) before using pitch-drift features"
+        )
+    return path

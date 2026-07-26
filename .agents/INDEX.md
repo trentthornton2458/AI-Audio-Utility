@@ -1,45 +1,91 @@
 # Sauron AI Directions & Capability Index
 
-> **Source of Truth for Target Project:** AI Audio Utility
-> **Last Updated:** 2026-07-23T03:33:45.000Z
+> **Source of Truth for Target Project:** Music Enhancer
+> **Last Updated:** 2026-07-26T03:33:12.661Z
 
 ---
 
 ## 1. Active Architectural Direction
-- **Vision:** Act as a senior audio software engineer. I want to build a local Python application that fixes AI artifacts, vocal hiss, and metallic resonances in Suno-generated audio tracks. With an .exe to install and use it with a guided setup.
+- **Vision:** Original Topic: I am using my music Enhance utility to make suno v5.5 tracks sound more human. It seems to work okay at applying audio tuning to the track to remove the compression and overall ai generated sibilance but I need a better method to make the vocals sound human and authentic while trying my best to keep this from being expensive. I would liek to create my own tool, or get an open source but a paid utility is my last resort.
 
+--- Counsel's Conclusion ---
 
-I want to build an app with 2 separate sections. one part STEM separation, then audio artifact fixing and mastering. The goal is to separate AI generated music, extract the STEMs as cleanly as possible, then analyze them and fix the AI artifacts and master the audio into a perfectly whole song that does not sound like ai. I want to avoid paying a subscription for other services to do this, I want to build my own app that handles this for me. 
+# Counsel's Conclusion: Technical Synthesis & Architectural Roadmap
 
+## Executive Summary
 
+The evaluation focused on determining an optimal, cost-effective, and fully local processing pipeline to eliminate AI artifacts (sibilance, metallic resonance, compression, micro-timing rigidity) from Suno v5.5 tracks while preserving authentic vocal characteristics (breath dynamics, natural vibrato, and transient detail). 
 
-1. **File Ingestion:**
-   - User uploads a Suno track (`.wav` or `.mp3`).
-   - Automatically convert to 44.1kHz 24-bit WAV internally for processing.
+The existing implementation in `AI-Audio-Utility` (`resemble-enhance` + Pedalboard DSP with BS-RoFormer stem separation) provides a strong foundation. The consensus verdict favors **optimizing and tuning the existing local neural+DSP pipeline**, introducing a controlled **DSP micro-imperfection/jitter layer**, and treating heavy voice conversion models as an optional, secondary wet-blend module.
 
-2. **Stem Separation:**
-   - Use `audio-separator` to split the track into `vocal` and `instrumental` stems using a RoFormer model (e.g., `model_bs_roformer_ep_317_sdr_12.9755.ckpt` or standard BS-RoFormer).
+---
 
-3. **Vocal Processing & Cleaning Pipeline:**
-   - **Step A (Neural Denoising & Harmonics):** Process the isolated vocal through `resemble-enhance` to strip top-end diffusion noise and reconstruct missing upper harmonics. Include UI toggles for `Denoise` and `Enhance` intensity.
-   - **Step B (DSP Polish via Pedalboard):**
-     - High-pass filter at 80 Hz (cuts low-end mud).
-     - Steep Low-pass filter at 14.5 kHz (removes remaining digital high-frequency sizzle).
-     - Peak EQ notch around 4 kHz (-3dB to -6dB adjustable) to tame metallic/pinched vocal resonances.
-     - Dynamic De-Esser targeting 5 kHz - 8 kHz.
+## Technical Evaluation of Proposed Approaches
 
-4. **Remixing & Export:**
-   - Mix the processed vocal stem back over the original instrumental stem.
-   - Provide UI controls for:
-     - **Vocal Clean Intensity** (Blend original vs. cleaned vocal)
-     - **Vocal Gain (dB)**
-     - **Instrumental Gain (dB)**
-     - **Harshness Cut (4kHz Notch Depth)**
-   - Recombine the track and output a downloadable 24-bit WAV file with side-by-side "Original vs. Cleaned" audio players.
+### 1. Pure Algorithmic DSP & Jitter (PSOLA / Pitch Drift)
+* **Strengths**: Lightweight, zero extra neural model overhead, deterministic execution, fits seamlessly into `app/core/vocal_chain.py`.
+* **Drawbacks & Risks**: Pitch and timing jitter alone cannot reconstruct missing upper-frequency harmonics or remove metallic formant locking inherent in Suno tracks. Unconditioned random pitch/timing perturbation without real reference data risks introducing phase smearing or a "wobbly/fluttering" artifact rather than natural human micro-variation.
 
+### 2. Full Neural Resynthesis & Voice Conversion (RVC v2 / Seed-VC)
+* **Strengths**: Replaces artificial timbre with authentic vocal samples; effectively solves severe formant locking.
+* **Drawbacks & Risks**: Highest risk profile across all proposals. Full voice replacement destroys vocal identity, removes subtle sung dynamics/breath, and requires target voice models that match the key, range, and style of the Suno track. Furthermore, aggressive Conditional Flow Matching (CFM) in `resemble-enhance` over-smooths natural vibrato. High GPU VRAM overhead and potential failure surface for a local utility.
 
+### 3. Granular Synthesis & Legacy Stem Separation (Spleeter / Librosa)
+* **Verdict**: **Rejected**. Spleeter is technically obsolete compared to the project's active `BS-RoFormer` model (which achieves significantly higher SDR and cleaner isolation). Uncontrolled granular noise injection introduces severe phase issues.
+
+---
+
+## Recommended Architecture & Pipeline Modifications
+
+To achieve human-sounding vocals while remaining 100% local, offline, and zero-cost, the pipeline will expand on the existing `app/core` architecture through a 4-stage processing flow:
+
+```
+[Suno Audio] ──► [BS-RoFormer Isolation] ──► [Gated Neural Harmonic Denoise] 
+                                                        │
+                                                        ▼
+[Mastered Output] ◄── [Remix & LUFS Limit] ◄── [DSP Polish & Micro-Jitter]
+```
+
+### Stage 1: Optimized Neural Denoising (`app/core/resemble_enhance.py`)
+* **CFM Step Gating**: Cap `resemble-enhance` CFM solver steps and restrict `Enhance` intensity to $\le 0.3$ (or Denoise-only mode). This prevents over-smoothing sung vibrato and micro-dynamics while stripping high-frequency diffusion noise.
+* **Harmonic Preservation**: Use `resemble-enhance` strictly to clean up top-end phase hiss rather than attempting total timbral re-synthesis.
+
+### Stage 2: Vocal DSP Polish & Micro-Imperfection Layer (`app/core/vocal_chain.py`)
+Add a dynamic micro-imperfection stage using `pyrubberband` and `pedalboard` post-denoise:
+1. **Micro-Pitch Drift**: Apply subtle, sub-cent random pitch drift ($\pm 3 \text{ to } 5\text{ cents}$) driven by a low-frequency oscillator ($4\text{–}7\text{ Hz}$) to break Suno's robotic micro-pitch locking.
+2. **Transient / Micro-Timing Offset**: Introduce mild time-domain jitter ($5\text{–}15\text{ ms}$) on vocal onset transients.
+3. **Resonance & Sibilance Sculpting**:
+   * High-pass filter at $80\text{ Hz}$.
+   * Adjustable 4 kHz peak EQ notch ($-3\text{dB to }-6\text{dB}$) targeting metallic resonance.
+   * Dynamic de-esser operating in the $5\text{ kHz}\text{–}8\text{ kHz}$ window.
+   * Low-pass filter roll-off around $14.5\text{ kHz}$ to eliminate digital sizzle.
+
+### Stage 3: Optional Timbral Wet Send (RVC / Seed-VC Integration)
+* Rather than full timbre substitution, implement pre-trained singing voice conversion (RVC v2 / Seed-VC) as an **optional parallel wet send** (capped at $\le 30\%$ blend).
+* Embeddings and inference are cached locally. If enabled by the user, this layers subtle organic vocal formants over the cleaned stem without overriding the original performance.
+
+### Stage 4: Remix, Transient Recovery, & Mastering (`app/core/mastering.py`)
+* **Residual Noise/Breath Blend**: Blend back low-level residual noise from the stem separation pass to restore natural breath sounds that neural separation often strips out.
+* **Instrumental Stem**: High-pass filter + gentle transient shaping only (no neural pass required for instrumental).
+* **Final Limiting**: Sum stems, apply dry/wet vocal blend, LUFS normalization (e.g., $-14\text{ LUFS}$), and true-peak limiting to 24-bit WAV export.
+
+---
+
+## Action Plan & User Controls
+
+To maintain full user agency over varying Suno generation qualities, expose the following controls within the PySide6 UI (`app/ui/vocal_control_panel.py`):
+
+| Control Parameter | Target Stage | Description / Value Range |
+| :--- | :--- | :--- |
+| **CFM Denoise Intensity** | `resemble-enhance` | $0.0 \text{ to } 0.3$ (Prevents vibrato flattening) |
+| **Humanizer Jitter** | `pyrubberband` | $0\% \text{ to } 100\%$ (Maps to $\pm 3\text{--}5\text{ cents}$ drift & micro-timing) |
+| **4kHz Metallic Cut** | `pedalboard` Notch | $0\text{dB to }-12\text{dB}$ attenuation |
+| **Timbre Resynthesis Send** | RVC / Seed-VC | $0\% \text{ to } 30\%$ parallel wet blend (Optional) |
+| **Vocal / Inst Blend** | Remix Stage | Per-stem dB gain + side-by-side A/B preview |
+
+*Active Counsel Quorum: 4/4*
 - **Selected Direction:** Default Sequential Pipeline
-- **Status:** completed
+- **Status:** executing
 
 ---
 
@@ -68,36 +114,18 @@ None specified.
 
 ---
 
-## 4. Execution Task Sequence (32 tasks)
-- [x] **#1: Set up repo structure and dependency management** [claude] 
-- [x] **#2: Build AppConfig, logging, and CacheManager** [claude] 
-- [x] **#3: Write scaffolding smoke tests** [antigravity] 
-- [x] **#4: Implement ingestion module** [claude] 
-- [x] **#5: Write ingestion tests** [antigravity] 
-- [x] **#6: Integrate audio-separator stem separation** [claude] 
-- [x] **#7: Build model download manager backend** [claude] 
-- [x] **#8: Test separation and model download logic** [antigravity] 
-- [x] **#9: Integrate resemble-enhance with per-stem caching** [claude] 
-- [x] **#10: Build vocal Pedalboard DSP chain** [claude] (Commit: e6322e1)
-- [x] **#11: Test vocal DSP chain correctness** [antigravity] 
-- [x] **#12: Build instrumental neural + DSP chain** [claude] (Commit: c8c299d)
-- [x] **#13: Test instrumental chain** [antigravity] 
-- [x] **#14: Build remix and mastering stage** [claude] (Commit: 0a9dd7c)
-- [x] **#15: Test remix/mastering/export accuracy** [antigravity] 
-- [x] **#16: Implement Preset data model and persistence** [claude] (Commit: 7385825)
-- [x] **#17: Test preset round-tripping** [antigravity] 
-- [x] **#18: Build the render job worker** [claude] (Commit: 00c628b)
-- [x] **#19: Build the first-run guided setup wizard UI** [antigravity] (Commit: 706fae8)
-- [x] **#20: Test job cancellation and failure paths** [antigravity] 
-- [x] **#21: Build main window and navigation shell** [antigravity] (Commit: 0fbe18f)
-- [x] **#22: Bug sweep on file load and navigation flow** [antigravity] 
-- [x] **#23: Build vocal control panel** [antigravity] (Commit: c245d6e)
-- [x] **#24: Build instrumental control panel** [antigravity] (Commit: 72becc6)
-- [x] **#25: Test control panel state and signal emission** [antigravity] 
-- [x] **#26: Build waveform A/B player widget** [antigravity] (Commit: 5336fb4)
-- [x] **#27: Build render history panel** [antigravity] (Commit: 026e27b)
-- [x] **#28: Test waveform rendering and render history behavior** [antigravity] 
-- [x] **#29: Configure PyInstaller build and Inno Setup script** [claude] (Commit: 6d92b33)
-- [x] **#30: Bug sweep on packaged build and first-run flow** [antigravity] 
-- [x] **#31: Full pipeline integration test** [antigravity] 
-- [x] **#32: Cross-cutting bug and UX sweep** [antigravity] 
+## 4. Execution Task Sequence (14 tasks)
+- [/] **#1: Add rubberband binary to model_downloader.py** [claude] 
+- [ ] **#2: Wire rubberband download into setup_wizard.py UI** [antigravity] 
+- [ ] **#3: Implement pitch-drift humanizer function** [claude] 
+- [ ] **#4: Implement automatic breath/noise blend-back** [claude] 
+- [ ] **#5: Insert Humanizer stage into vocal_chain.py pipeline** [claude] 
+- [ ] **#6: Add pitch-variance, HF-energy, and crest-factor QA metrics** [claude] 
+- [ ] **#7: Surface QA warnings as a caution badge in vocal_panel.py** [antigravity] 
+- [ ] **#8: Create factory reference asset loading + fallback logic** [claude] 
+- [ ] **#9: First-run fallback modal for missing reference assets** [antigravity] 
+- [ ] **#10: Extend A/B compare UI with Raw / Humanized / Reference blind toggle** [antigravity] 
+- [ ] **#11: Add stubbed voice-conversion config field** [claude] 
+- [ ] **#12: Add disabled 'Coming Soon' RVC slider to vocal_panel.py** [antigravity] 
+- [ ] **#13: End-to-end pipeline test for Humanizer stage** [jules] 
+- [ ] **#14: Bug sweep across new Humanizer stage and UI** [jules] 
