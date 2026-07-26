@@ -19,11 +19,15 @@ def _write_wav(path: Path, samples: np.ndarray, sr: int) -> None:
 
 def test_extract_loudest_window_returns_whole_file_when_shorter_than_window(tmp_path):
     sr = 8000
-    audio = np.random.default_rng(0).uniform(-0.1, 0.1, size=(sr * 2, 1)).astype(np.float32)  # 2s
+    audio = (
+        np.random.default_rng(0).uniform(-0.1, 0.1, size=(sr * 2, 1)).astype(np.float32)
+    )  # 2s
     path = tmp_path / "short.wav"
     _write_wav(path, audio, sr)
 
-    result_audio, result_sr = gemini_qa._extract_loudest_window(path, window_seconds=20.0)
+    result_audio, result_sr = gemini_qa._extract_loudest_window(
+        path, window_seconds=20.0
+    )
 
     assert result_sr == sr
     assert result_audio.shape[0] == audio.shape[0]
@@ -43,7 +47,9 @@ def test_extract_loudest_window_picks_the_loud_segment(tmp_path):
     path = tmp_path / "loud.wav"
     _write_wav(path, audio, sr)
 
-    result_audio, result_sr = gemini_qa._extract_loudest_window(path, window_seconds=window_seconds)
+    result_audio, result_sr = gemini_qa._extract_loudest_window(
+        path, window_seconds=window_seconds
+    )
 
     assert result_sr == sr
     assert result_audio.shape[0] == int(window_seconds * sr)
@@ -154,11 +160,18 @@ def test_diagnose_qa_window_returns_clamped_multiplier():
     dsp_window = np.zeros(sr, dtype=np.float32)
     enhanced_window = np.zeros(sr, dtype=np.float32)
 
-    parsed = gemini_qa._WindowDiagnosis(verdict="hallucinated_tone", recommended_gain_multiplier=1.5)
+    parsed = gemini_qa._WindowDiagnosis(
+        verdict="hallucinated_tone", recommended_gain_multiplier=1.5
+    )
 
     with patch("app.core.gemini_qa.genai.Client", return_value=_mock_client(parsed)):
         multiplier, verdict = gemini_qa.diagnose_qa_window(
-            dsp_window, enhanced_window, sr, api_key="fake-key", stem_label="vocal", reason="hallucination_proxy"
+            dsp_window,
+            enhanced_window,
+            sr,
+            api_key="fake-key",
+            stem_label="vocal",
+            reason="hallucination_proxy",
         )
 
     assert multiplier == 1.0  # clamped down from 1.5
@@ -176,5 +189,10 @@ def test_diagnose_qa_window_raises_gemini_analysis_error_on_sdk_failure():
     with patch("app.core.gemini_qa.genai.Client", return_value=mock_client):
         with pytest.raises(gemini_qa.GeminiAnalysisError):
             gemini_qa.diagnose_qa_window(
-                dsp_window, enhanced_window, sr, api_key="fake-key", stem_label="vocal", reason="silence"
+                dsp_window,
+                enhanced_window,
+                sr,
+                api_key="fake-key",
+                stem_label="vocal",
+                reason="silence",
             )

@@ -19,7 +19,14 @@ from PySide6.QtCore import QObject, QThread, Signal
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
-from app.core import ingestion, instrumental_chain, qa_gate, remix_master, separation, vocal_chain
+from app.core import (
+    ingestion,
+    instrumental_chain,
+    qa_gate,
+    remix_master,
+    separation,
+    vocal_chain,
+)
 from app.core.instrumental_chain import InstrumentalEqParams
 from app.models import gemini_settings
 from app.models.preset import Preset
@@ -114,7 +121,9 @@ class RenderJob(QThread):
             self._cleanup_partial_files()
             self.failed.emit(str(exc))
         else:
-            logger.info("Render job finished for %s -> %s", self._input_path, output_path)
+            logger.info(
+                "Render job finished for %s -> %s", self._input_path, output_path
+            )
             self.renderFinished.emit(output_path)
 
     def _cleanup_partial_files(self) -> None:
@@ -134,7 +143,13 @@ class RenderJob(QThread):
                 self.progressChanged.emit(val)
 
     @contextlib.contextmanager
-    def _smooth_progress(self, stage_name: str, start_fraction: float, end_fraction: float, estimated_duration: float):
+    def _smooth_progress(
+        self,
+        stage_name: str,
+        start_fraction: float,
+        end_fraction: float,
+        estimated_duration: float,
+    ):
         stop_event = threading.Event()
 
         def estimator():
@@ -152,7 +167,9 @@ class RenderJob(QThread):
                 else:
                     fraction = 0.0
 
-                current_progress = start_progress + (end_progress - start_progress) * fraction
+                current_progress = (
+                    start_progress + (end_progress - start_progress) * fraction
+                )
                 self._emit_progress(current_progress)
                 time.sleep(0.1)
 
@@ -185,15 +202,20 @@ class RenderJob(QThread):
 
     def _render(self) -> Path:
         import torch
+
         preset = self._preset
         cache_manager = self._cache_manager
 
         self._enter_stage("Normalizing")
         track_id = cache_manager.compute_track_id(self._input_path)
-        normalized_path = cache_manager.track_dir(track_id) / ingestion.NORMALIZED_FILENAME
+        normalized_path = (
+            cache_manager.track_dir(track_id) / ingestion.NORMALIZED_FILENAME
+        )
 
         self._active_files.add(normalized_path)
-        normalized_path = ingestion.load_and_normalize_track(self._input_path, cache_manager)
+        normalized_path = ingestion.load_and_normalize_track(
+            self._input_path, cache_manager
+        )
         self._active_files.discard(normalized_path)
 
         track_id = normalized_path.parent.name
@@ -208,7 +230,9 @@ class RenderJob(QThread):
 
         duration = 6.0 if torch.cuda.is_available() else 30.0
         with self._smooth_progress("Separating", 0.0, 1.0, duration):
-            vocal_stem_path, instrumental_stem_path = separation.separate_stems(normalized_path, cache_manager)
+            vocal_stem_path, instrumental_stem_path = separation.separate_stems(
+                normalized_path, cache_manager
+            )
 
         self._active_files.discard(vocal_path)
         self._active_files.discard(instrumental_path)
@@ -219,8 +243,10 @@ class RenderJob(QThread):
         )
 
         self._enter_stage("Denoising Instrumental")
-        instrumental_audio, instrumental_samplerate, instrumental_qa_flags = self._process_instrumental(
-            instrumental_stem_path, preset, cache_manager, track_id
+        instrumental_audio, instrumental_samplerate, instrumental_qa_flags = (
+            self._process_instrumental(
+                instrumental_stem_path, preset, cache_manager, track_id
+            )
         )
 
         if vocal_samplerate != instrumental_samplerate:
@@ -232,7 +258,10 @@ class RenderJob(QThread):
 
         self._enter_stage("Mixing")
         mixed = remix_master.mix_stems(
-            vocal_audio, instrumental_audio, preset.vocal_gain_db, preset.instrumental_gain_db
+            vocal_audio,
+            instrumental_audio,
+            preset.vocal_gain_db,
+            preset.instrumental_gain_db,
         )
         self._checkpoint()
 
@@ -247,7 +276,9 @@ class RenderJob(QThread):
         self._active_files.add(json_path)
 
         exported_path = remix_master.export_wav(mastered, sample_rate, output_path)
-        self._write_metadata(exported_path, track_id, vocal_qa_flags + instrumental_qa_flags)
+        self._write_metadata(
+            exported_path, track_id, vocal_qa_flags + instrumental_qa_flags
+        )
 
         self._active_files.clear()
         return exported_path
@@ -268,7 +299,9 @@ class RenderJob(QThread):
                 json.dump(metadata, f, indent=2)
             logger.info("Wrote render metadata to %s", json_path)
         except Exception as exc:
-            logger.warning("Failed to write render metadata for %s: %s", render_path, exc)
+            logger.warning(
+                "Failed to write render metadata for %s: %s", render_path, exc
+            )
 
     def _process_vocal(
         self,
@@ -297,7 +330,10 @@ class RenderJob(QThread):
         dsp_vocal_path = cache_manager.stems_dir(track_id) / VOCAL_DSP_FILENAME
         self._active_files.add(dsp_vocal_path)
         vocal_chain.apply_dsp_chain(
-            denoised_vocal_path, preset.notch_depth_db, preset.vocal_deesser_depth_db, dsp_vocal_path
+            denoised_vocal_path,
+            preset.notch_depth_db,
+            preset.vocal_deesser_depth_db,
+            dsp_vocal_path,
         )
         self._active_files.discard(dsp_vocal_path)
         self._sub_progress("Denoising Vocal", 0.45)
@@ -319,17 +355,29 @@ class RenderJob(QThread):
 
         gemini_api_key = gemini_settings.get_gemini_api_key()
         qa_result = vocal_chain.blend_vocal(
-            dsp_vocal_path, enhanced_vocal_path, preset.vocal_enhance_intensity, gemini_api_key=gemini_api_key
+            dsp_vocal_path,
+            enhanced_vocal_path,
+            preset.vocal_enhance_intensity,
+            gemini_api_key=gemini_api_key,
         )
         self._sub_progress("Denoising Vocal", 0.9)
         self._checkpoint()
 
-        qa_blend_vocal_path = cache_manager.stems_dir(track_id) / VOCAL_QA_BLEND_FILENAME
+        qa_blend_vocal_path = (
+            cache_manager.stems_dir(track_id) / VOCAL_QA_BLEND_FILENAME
+        )
         self._active_files.add(qa_blend_vocal_path)
-        sf.write(str(qa_blend_vocal_path), qa_result.audio, qa_result.samplerate, subtype=VOCAL_QA_BLEND_SUBTYPE)
+        sf.write(
+            str(qa_blend_vocal_path),
+            qa_result.audio,
+            qa_result.samplerate,
+            subtype=VOCAL_QA_BLEND_SUBTYPE,
+        )
         self._active_files.discard(qa_blend_vocal_path)
 
-        residual_stem_path = cache_manager.stems_dir(track_id) / separation.RESIDUAL_FILENAME
+        residual_stem_path = (
+            cache_manager.stems_dir(track_id) / separation.RESIDUAL_FILENAME
+        )
         try:
             humanized_vocal_path = vocal_chain.run_humanizer_pass(
                 qa_blend_vocal_path,
@@ -344,7 +392,9 @@ class RenderJob(QThread):
         self._sub_progress("Denoising Vocal", 1.0)
         self._checkpoint()
 
-        humanized_audio, humanized_samplerate = sf.read(str(humanized_vocal_path), always_2d=True, dtype="float64")
+        humanized_audio, humanized_samplerate = sf.read(
+            str(humanized_vocal_path), always_2d=True, dtype="float64"
+        )
         return humanized_audio, humanized_samplerate, qa_result.qa_flags
 
     def _process_instrumental(
@@ -376,9 +426,13 @@ class RenderJob(QThread):
             dehiss_shelf_hz=preset.instrumental_dehiss_shelf_hz,
             dehiss_gain_db=preset.instrumental_dehiss_gain_db,
         )
-        dsp_instrumental_path = cache_manager.stems_dir(track_id) / INSTRUMENTAL_DSP_FILENAME
+        dsp_instrumental_path = (
+            cache_manager.stems_dir(track_id) / INSTRUMENTAL_DSP_FILENAME
+        )
         self._active_files.add(dsp_instrumental_path)
-        instrumental_chain.apply_dsp_chain(denoised_instrumental_path, eq_params, dsp_instrumental_path)
+        instrumental_chain.apply_dsp_chain(
+            denoised_instrumental_path, eq_params, dsp_instrumental_path
+        )
         self._active_files.discard(dsp_instrumental_path)
         self._sub_progress("Denoising Instrumental", 0.45)
         self._checkpoint()
@@ -423,7 +477,9 @@ class RenderJob(QThread):
 
     def _sub_progress(self, stage_name: str, fraction_complete: float) -> None:
         weight = dict(_STAGE_WEIGHTS)[stage_name]
-        self._emit_progress(self._stage_offsets[stage_name] + weight * fraction_complete)
+        self._emit_progress(
+            self._stage_offsets[stage_name] + weight * fraction_complete
+        )
 
     def _checkpoint(self) -> None:
         if self.isInterruptionRequested():

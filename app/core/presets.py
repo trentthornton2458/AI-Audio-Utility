@@ -44,7 +44,9 @@ def load_preset(name: str, cache_manager: CacheManager) -> Preset:
 
 def list_presets(cache_manager: CacheManager) -> list[str]:
     """Return the names of all saved presets, sorted alphabetically."""
-    return sorted(path.stem for path in cache_manager.presets_dir.glob(f"*{PRESET_FILE_SUFFIX}"))
+    return sorted(
+        path.stem for path in cache_manager.presets_dir.glob(f"*{PRESET_FILE_SUFFIX}")
+    )
 
 
 def delete_preset(name: str, cache_manager: CacheManager) -> None:

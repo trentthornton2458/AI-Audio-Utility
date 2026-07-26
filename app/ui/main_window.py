@@ -38,7 +38,10 @@ from app.models.settings import Settings
 from app.ui.ab_compare_view import ABCompareView
 from app.ui.gemini_settings_dialog import GeminiSettingsDialog
 from app.ui.instrumental_panel import InstrumentalPanel
-from app.ui.reference_fallback_dialog import ReferenceFallbackDialog, check_reference_assets_fallback
+from app.ui.reference_fallback_dialog import (
+    ReferenceFallbackDialog,
+    check_reference_assets_fallback,
+)
 from app.ui.vocal_panel import VocalPanel
 from app.workers.render_job import RenderJob
 from app.workers.separation_job import SeparationJob
@@ -144,7 +147,9 @@ class FileLoadPanel(QFrame):
     @Slot()
     def on_browse_clicked(self) -> None:
         file_dialog = QFileDialog(self, "Select Suno Audio Track")
-        file_dialog.setNameFilter("Audio Files (*.wav *.mp3);;WAV Files (*.wav);;MP3 Files (*.mp3);;All Files (*)")
+        file_dialog.setNameFilter(
+            "Audio Files (*.wav *.mp3);;WAV Files (*.wav);;MP3 Files (*.mp3);;All Files (*)"
+        )
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
 
         if file_dialog.exec() == QFileDialog.DialogCode.Accepted:
@@ -152,8 +157,12 @@ class FileLoadPanel(QFrame):
             if selected_files:
                 self.fileSelected.emit(Path(selected_files[0]))
 
-    def set_track_info(self, input_path: Path, normalized_path: Optional[Path] = None) -> None:
-        norm_status = f" | Normalized: {normalized_path.name}" if normalized_path else ""
+    def set_track_info(
+        self, input_path: Path, normalized_path: Optional[Path] = None
+    ) -> None:
+        norm_status = (
+            f" | Normalized: {normalized_path.name}" if normalized_path else ""
+        )
         self._drop_label.setText(
             f"<b style='color: #55efc4;'>Selected Track: {input_path.name}</b><br>"
             f"<span style='color: #a0a5b5;'>{input_path.parent}</span>"
@@ -186,13 +195,19 @@ class StemSeparationPanel(QWidget):
         layout.addWidget(desc)
 
         card = QFrame()
-        card.setStyleSheet("QFrame { background-color: #21232e; border-radius: 8px; padding: 16px; }")
+        card.setStyleSheet(
+            "QFrame { background-color: #21232e; border-radius: 8px; padding: 16px; }"
+        )
         card_layout = QVBoxLayout(card)
 
-        self._model_label = QLabel("<b>Separation Model:</b> BS-RoFormer (model_bs_roformer_ep_317_sdr_12.9755.ckpt)")
+        self._model_label = QLabel(
+            "<b>Separation Model:</b> BS-RoFormer (model_bs_roformer_ep_317_sdr_12.9755.ckpt)"
+        )
         card_layout.addWidget(self._model_label)
 
-        self._stem_status_label = QLabel("Stems status: <i>No stems generated yet. Ingest a file to run separation.</i>")
+        self._stem_status_label = QLabel(
+            "Stems status: <i>No stems generated yet. Ingest a file to run separation.</i>"
+        )
         self._stem_status_label.setWordWrap(True)
         card_layout.addWidget(self._stem_status_label)
 
@@ -237,7 +252,9 @@ class StemSeparationPanel(QWidget):
         self._extract_button.setText("✂️  Re-extract Stems")
 
     def set_separation_failed(self, error: str) -> None:
-        self._stem_status_label.setText(f"<span style='color:#ff7675;'>Separation failed: {error}</span>")
+        self._stem_status_label.setText(
+            f"<span style='color:#ff7675;'>Separation failed: {error}</span>"
+        )
         self._extract_button.setEnabled(True)
         self._extract_button.setText("✂️  Extract Stems")
 
@@ -298,7 +315,9 @@ class MainWindow(QMainWindow):
         self._tab_widget.setObjectName("MainTabs")
 
         self._stem_separation_panel = StemSeparationPanel()
-        self._stem_separation_panel.separationRequested.connect(self.on_extract_stems_requested)
+        self._stem_separation_panel.separationRequested.connect(
+            self.on_extract_stems_requested
+        )
 
         # Real control panels with full slider/toggle controls
         self._vocal_panel = VocalPanel(cache_manager=self._cache_manager)
@@ -306,8 +325,12 @@ class MainWindow(QMainWindow):
         self._vocal_panel.autoTuneRequested.connect(self.on_manual_auto_tune_requested)
 
         self._instrumental_panel = InstrumentalPanel(cache_manager=self._cache_manager)
-        self._instrumental_panel.renderRequested.connect(self.on_instrumental_render_requested)
-        self._instrumental_panel.autoTuneRequested.connect(self.on_manual_auto_tune_requested)
+        self._instrumental_panel.renderRequested.connect(
+            self.on_instrumental_render_requested
+        )
+        self._instrumental_panel.autoTuneRequested.connect(
+            self.on_manual_auto_tune_requested
+        )
 
         self._ab_compare_view = ABCompareView(cache_manager=self._cache_manager)
 
@@ -350,7 +373,9 @@ class MainWindow(QMainWindow):
 
         self._cancel_button = QPushButton("Cancel Render")
         self._cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._cancel_button.setStyleSheet("background-color: #d63031; color: white; padding: 2px 8px; border-radius: 4px;")
+        self._cancel_button.setStyleSheet(
+            "background-color: #d63031; color: white; padding: 2px 8px; border-radius: 4px;"
+        )
         self._cancel_button.setVisible(False)
         self._cancel_button.clicked.connect(self.on_cancel_render_clicked)
         self._status_bar.addPermanentWidget(self._cancel_button)
@@ -410,7 +435,9 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             logger.exception("Unexpected error during ingestion: %s", exc)
             self._status_label.setText(f"Error ingesting file: {exc}")
-            QMessageBox.critical(self, "Ingestion Error", f"Failed to ingest track: {exc}")
+            QMessageBox.critical(
+                self, "Ingestion Error", f"Failed to ingest track: {exc}"
+            )
         else:
             self._current_input_path = input_path
             self._normalized_path = normalized_path
@@ -421,14 +448,20 @@ class MainWindow(QMainWindow):
             self._ab_compare_view.load_original(normalized_path)
             self._ab_compare_view.set_track_id(normalized_path.parent.name)
 
-            self._status_label.setText(f"Track ingested and normalized: {normalized_path.name}")
+            self._status_label.setText(
+                f"Track ingested and normalized: {normalized_path.name}"
+            )
             logger.info("Track successfully normalized: %s", normalized_path)
 
     @Slot()
     def on_render_requested(self) -> None:
         """Triggered by the main 'Render & Master Track' button — collects from both panels."""
         if self._current_input_path is None:
-            QMessageBox.warning(self, "No Track Ingested", "Please select and ingest a track before rendering.")
+            QMessageBox.warning(
+                self,
+                "No Track Ingested",
+                "Please select and ingest a track before rendering.",
+            )
             return
 
         preset = self._collect_preset()
@@ -442,14 +475,25 @@ class MainWindow(QMainWindow):
         raw vocal/instrumental stems without waiting on the full CPU render pipeline.
         """
         if self._current_input_path is None:
-            QMessageBox.warning(self, "No Track Ingested", "Please select and ingest a track before extracting stems.")
+            QMessageBox.warning(
+                self,
+                "No Track Ingested",
+                "Please select and ingest a track before extracting stems.",
+            )
             return
 
-        if self._active_separation_job is not None and self._active_separation_job.isRunning():
+        if (
+            self._active_separation_job is not None
+            and self._active_separation_job.isRunning()
+        ):
             logger.warning("SeparationJob is already running")
             return
         if self._active_render_job is not None and self._active_render_job.isRunning():
-            QMessageBox.warning(self, "Render In Progress", "A render is already running; please wait for it to finish.")
+            QMessageBox.warning(
+                self,
+                "Render In Progress",
+                "A render is already running; please wait for it to finish.",
+            )
             return
 
         logger.info("Starting SeparationJob for %s", self._current_input_path)
@@ -485,7 +529,7 @@ class MainWindow(QMainWindow):
         self._render_button.setEnabled(True)
         self._stem_separation_panel.set_separated(vocal_path, instrumental_path)
         self._render_button.setEnabled(True)
-        
+
         self._last_vocal_path = vocal_path
         self._last_instrumental_path = instrumental_path
 
@@ -502,9 +546,13 @@ class MainWindow(QMainWindow):
     @Slot()
     def on_manual_auto_tune_requested(self) -> None:
         if not self._last_vocal_path or not self._last_instrumental_path:
-            QMessageBox.warning(self, "Auto-Tune Error", "Please extract stems before running Gemini AI Auto-Tune.")
+            QMessageBox.warning(
+                self,
+                "Auto-Tune Error",
+                "Please extract stems before running Gemini AI Auto-Tune.",
+            )
             return
-        
+
         self._start_stem_analysis(self._last_vocal_path, self._last_instrumental_path)
 
     def _start_stem_analysis(self, vocal_path: Path, instrumental_path: Path) -> None:
@@ -516,17 +564,26 @@ class MainWindow(QMainWindow):
         whatever they were already set to, logged and surfaced via the status bar rather than
         a blocking dialog.
         """
-        if self._active_stem_analysis_job is not None and self._active_stem_analysis_job.isRunning():
-            logger.warning("StemAnalysisJob is already running; skipping duplicate request")
+        if (
+            self._active_stem_analysis_job is not None
+            and self._active_stem_analysis_job.isRunning()
+        ):
+            logger.warning(
+                "StemAnalysisJob is already running; skipping duplicate request"
+            )
             return
 
         api_key = gemini_settings.get_gemini_api_key()
         if not api_key:
             logger.warning("No Gemini API key configured; skipping AI stem analysis")
-            self._status_label.setText("Stems extracted. (AI auto-tune skipped: no Gemini API key configured.)")
+            self._status_label.setText(
+                "Stems extracted. (AI auto-tune skipped: no Gemini API key configured.)"
+            )
             return
 
-        logger.info("Starting StemAnalysisJob for %s, %s", vocal_path, instrumental_path)
+        logger.info(
+            "Starting StemAnalysisJob for %s, %s", vocal_path, instrumental_path
+        )
         job = StemAnalysisJob(
             vocal_path=vocal_path,
             instrumental_path=instrumental_path,
@@ -536,11 +593,15 @@ class MainWindow(QMainWindow):
         job.analysisFinished.connect(self.on_stem_analysis_finished)
 
         self._active_stem_analysis_job = job
-        self._status_label.setText("Analyzing stems with Gemini AI to suggest starting values...")
+        self._status_label.setText(
+            "Analyzing stems with Gemini AI to suggest starting values..."
+        )
         job.start()
 
     @Slot(dict, dict, list)
-    def on_stem_analysis_finished(self, vocal_updates: dict, instrumental_updates: dict, errors: list) -> None:
+    def on_stem_analysis_finished(
+        self, vocal_updates: dict, instrumental_updates: dict, errors: list
+    ) -> None:
         self._active_stem_analysis_job = None
 
         if vocal_updates:
@@ -559,11 +620,17 @@ class MainWindow(QMainWindow):
             logger.warning("Gemini stem analysis had errors: %s", errors)
 
         if vocal_updates and instrumental_updates:
-            self._status_label.setText("AI auto-tune applied to vocal and instrumental sliders.")
+            self._status_label.setText(
+                "AI auto-tune applied to vocal and instrumental sliders."
+            )
         elif vocal_updates or instrumental_updates:
-            self._status_label.setText("AI auto-tune partially applied (see log for details).")
+            self._status_label.setText(
+                "AI auto-tune partially applied (see log for details)."
+            )
         else:
-            self._status_label.setText("AI auto-tune failed; using existing slider values.")
+            self._status_label.setText(
+                "AI auto-tune failed; using existing slider values."
+            )
 
     @Slot()
     def on_edit_gemini_key_clicked(self) -> None:
@@ -589,13 +656,21 @@ class MainWindow(QMainWindow):
         self._stem_separation_panel.set_separation_failed(error)
         self._active_separation_job = None
 
-        QMessageBox.critical(self, "Separation Failed", f"An error occurred during stem separation:\n{error}")
+        QMessageBox.critical(
+            self,
+            "Separation Failed",
+            f"An error occurred during stem separation:\n{error}",
+        )
 
     @Slot(Settings)
     def on_vocal_render_requested(self, settings: Settings) -> None:
         """Triggered by the VocalPanel's own 'Apply / Render' button."""
         if self._current_input_path is None:
-            QMessageBox.warning(self, "No Track Ingested", "Please select and ingest a track before rendering.")
+            QMessageBox.warning(
+                self,
+                "No Track Ingested",
+                "Please select and ingest a track before rendering.",
+            )
             return
 
         preset = self._collect_preset()
@@ -605,13 +680,19 @@ class MainWindow(QMainWindow):
     def on_instrumental_render_requested(self, settings: Settings) -> None:
         """Triggered by the InstrumentalPanel's own 'Apply / Render' button."""
         if self._current_input_path is None:
-            QMessageBox.warning(self, "No Track Ingested", "Please select and ingest a track before rendering.")
+            QMessageBox.warning(
+                self,
+                "No Track Ingested",
+                "Please select and ingest a track before rendering.",
+            )
             return
 
         preset = self._collect_preset()
         self.start_render_job(preset)
 
-    def start_render_job(self, preset: Preset, output_path: Optional[Path] = None) -> None:
+    def start_render_job(
+        self, preset: Preset, output_path: Optional[Path] = None
+    ) -> None:
         if self._current_input_path is None:
             logger.warning("Cannot start RenderJob without current input path")
             return
@@ -619,11 +700,22 @@ class MainWindow(QMainWindow):
         if self._active_render_job is not None and self._active_render_job.isRunning():
             logger.warning("RenderJob is already running")
             return
-        if self._active_separation_job is not None and self._active_separation_job.isRunning():
-            QMessageBox.warning(self, "Separation In Progress", "Stem extraction is running; please wait for it to finish.")
+        if (
+            self._active_separation_job is not None
+            and self._active_separation_job.isRunning()
+        ):
+            QMessageBox.warning(
+                self,
+                "Separation In Progress",
+                "Stem extraction is running; please wait for it to finish.",
+            )
             return
 
-        logger.info("Starting RenderJob for %s with preset: %s", self._current_input_path, preset)
+        logger.info(
+            "Starting RenderJob for %s with preset: %s",
+            self._current_input_path,
+            preset,
+        )
         job = RenderJob(
             input_path=self._current_input_path,
             preset=preset,
@@ -685,7 +777,9 @@ class MainWindow(QMainWindow):
         self._render_button.setEnabled(True)
         self._active_render_job = None
 
-        QMessageBox.critical(self, "Render Failed", f"An error occurred during rendering:\n{error}")
+        QMessageBox.critical(
+            self, "Render Failed", f"An error occurred during rendering:\n{error}"
+        )
 
     @Slot()
     def on_render_cancelled(self) -> None:
@@ -704,6 +798,9 @@ class MainWindow(QMainWindow):
         if self._active_render_job is not None and self._active_render_job.isRunning():
             self._status_label.setText("Cancelling render...")
             self._active_render_job.cancel()
-        if self._active_separation_job is not None and self._active_separation_job.isRunning():
+        if (
+            self._active_separation_job is not None
+            and self._active_separation_job.isRunning()
+        ):
             self._status_label.setText("Cancelling separation...")
             self._active_separation_job.cancel()

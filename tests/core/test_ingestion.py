@@ -1,15 +1,13 @@
 """Tests for audio track ingestion and normalization."""
 
 from pathlib import Path
+
 import numpy as np
 import pytest
 import soundfile as sf
 
 from app.cache.cache_manager import CacheManager
-from app.core.ingestion import (
-    UnsupportedAudioFormatError,
-    load_and_normalize_track,
-)
+from app.core.ingestion import UnsupportedAudioFormatError, load_and_normalize_track
 from app.models.app_config import AppConfig
 
 
