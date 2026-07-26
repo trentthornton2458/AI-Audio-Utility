@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** Music Enhancer
-> **Last Updated:** 2026-07-26T07:50:11.021Z
+> **Last Updated:** 2026-07-26T07:51:27.258Z
 
 ---
 
@@ -128,7 +128,7 @@ None specified.
 - [x] **#8: Create factory reference asset loading + fallback logic** [claude] (Commit: b40eb34)
 - [x] **#9: First-run fallback modal for missing reference assets** [antigravity] (Commit: a63f0a2)
 - [ ] **#10: Extend A/B compare UI with Raw / Humanized / Reference blind toggle** [antigravity] 
-- [/] **#11: Add stubbed voice-conversion config field** [claude] 
+- [x] **#11: Add stubbed voice-conversion config field** [claude] (Commit: ab23a9f)
 - [ ] **#12: Add disabled 'Coming Soon' RVC slider to vocal_panel.py** [antigravity] 
-- [ ] **#13: End-to-end pipeline test for Humanizer stage** [jules] 
+- [/] **#13: End-to-end pipeline test for Humanizer stage** [jules] 
 - [ ] **#14: Bug sweep across new Humanizer stage and UI** [jules] 
