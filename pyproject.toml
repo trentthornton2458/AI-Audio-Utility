@@ -22,6 +22,10 @@ dependencies = [
     # `pip install resemble-enhance --no-deps` and relies on the runtime deps listed explicitly
     # below (at compatible versions, not resemble-enhance's pinned ancient ones) instead.
     "pedalboard",
+    # Python wrapper around the external rubberband CLI binary (GPL, fetched at setup time by
+    # app/setup/model_downloader.py rather than bundled) -- used by app/core/humanizer.py for
+    # LFO-driven micro-pitch drift. See CONVENTIONS.md: no new deps beyond this one.
+    "pyrubberband",
     "pyloudnorm",
     "soundfile",
     "imageio-ffmpeg",
