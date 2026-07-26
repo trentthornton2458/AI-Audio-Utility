@@ -137,7 +137,6 @@ class IntensitySlider(QWidget):
         self.value_label.setText(f"{int_val}%")
 
 
-
 class VocalPanel(QWidget):
     """Control panel QWidget for configuring vocal stem cleaning, DSP parameters, and gain."""
 
@@ -234,7 +233,9 @@ class VocalPanel(QWidget):
         # Denoise Row
         self._denoise_widget = IntensitySlider(
             "Enable Denoise",
-            initial_value=int(round(self._current_settings.vocal_denoise_intensity * 100)),
+            initial_value=int(
+                round(self._current_settings.vocal_denoise_intensity * 100)
+            ),
             checked=self._current_settings.vocal_denoise_enabled,
         )
         self._denoise_cb = self._denoise_widget.checkbox
@@ -247,7 +248,9 @@ class VocalPanel(QWidget):
         # Enhance Row (hard-capped at 35% -- see app.core.qa_gate.MAX_ENHANCE_GAIN)
         self._enhance_widget = IntensitySlider(
             "Enable Harmonic Enhancement",
-            initial_value=int(round(self._current_settings.vocal_enhance_intensity * 100)),
+            initial_value=int(
+                round(self._current_settings.vocal_enhance_intensity * 100)
+            ),
             checked=self._current_settings.vocal_enhance_enabled,
             max_value=35,
         )
@@ -274,7 +277,9 @@ class VocalPanel(QWidget):
         notch_header = QHBoxLayout()
         notch_title = QLabel("<b>Harshness Cut (4kHz Notch Depth)</b>")
         notch_title.setStyleSheet("color: #ffffff;")
-        notch_desc = QLabel("<span style='color: #8a8d9b; font-size: 11px;'>(Reduces pinched Suno frequencies)</span>")
+        notch_desc = QLabel(
+            "<span style='color: #8a8d9b; font-size: 11px;'>(Reduces pinched Suno frequencies)</span>"
+        )
 
         # Map notch depth to display string, e.g. "-4.5 dB"
         notch_val = self._current_settings.notch_depth_db
@@ -300,7 +305,9 @@ class VocalPanel(QWidget):
         deesser_header = QHBoxLayout()
         deesser_title = QLabel("<b>De-Esser (Sibilance Reduction)</b>")
         deesser_title.setStyleSheet("color: #ffffff;")
-        deesser_desc = QLabel("<span style='color: #8a8d9b; font-size: 11px;'>(Reduces harsh 's' sounds)</span>")
+        deesser_desc = QLabel(
+            "<span style='color: #8a8d9b; font-size: 11px;'>(Reduces harsh 's' sounds)</span>"
+        )
 
         deesser_val = self._current_settings.vocal_deesser_depth_db
         self._deesser_val_label = QLabel(f"{deesser_val:.1f} dB")
@@ -401,11 +408,17 @@ class VocalPanel(QWidget):
     def get_settings(self) -> Settings:
         """Assemble and return the current panel values into a Settings object."""
         self._current_settings.vocal_denoise_enabled = self._denoise_cb.isChecked()
-        self._current_settings.vocal_denoise_intensity = self._denoise_slider.value() / 100.0
+        self._current_settings.vocal_denoise_intensity = (
+            self._denoise_slider.value() / 100.0
+        )
         self._current_settings.vocal_enhance_enabled = self._enhance_cb.isChecked()
-        self._current_settings.vocal_enhance_intensity = self._enhance_slider.value() / 100.0
+        self._current_settings.vocal_enhance_intensity = (
+            self._enhance_slider.value() / 100.0
+        )
         self._current_settings.notch_depth_db = float(self._notch_slider.value()) / 10.0
-        self._current_settings.vocal_deesser_depth_db = float(self._deesser_slider.value()) / 10.0
+        self._current_settings.vocal_deesser_depth_db = (
+            float(self._deesser_slider.value()) / 10.0
+        )
         self._current_settings.vocal_gain_db = self._gain_spinner.value()
         return Settings.from_preset(self._current_settings.to_preset())
 
@@ -421,14 +434,22 @@ class VocalPanel(QWidget):
         try:
             # Update UI controls without triggering unwanted state mutations
             self._denoise_cb.setChecked(preset.vocal_denoise_enabled)
-            self._denoise_slider.setValue(int(round(preset.vocal_denoise_intensity * 100)))
+            self._denoise_slider.setValue(
+                int(round(preset.vocal_denoise_intensity * 100))
+            )
             self._denoise_slider.setEnabled(preset.vocal_denoise_enabled)
-            self._denoise_val_label.setText(f"{int(round(preset.vocal_denoise_intensity * 100))}%")
+            self._denoise_val_label.setText(
+                f"{int(round(preset.vocal_denoise_intensity * 100))}%"
+            )
 
             self._enhance_cb.setChecked(preset.vocal_enhance_enabled)
-            self._enhance_slider.setValue(int(round(preset.vocal_enhance_intensity * 100)))
+            self._enhance_slider.setValue(
+                int(round(preset.vocal_enhance_intensity * 100))
+            )
             self._enhance_slider.setEnabled(preset.vocal_enhance_enabled)
-            self._enhance_val_label.setText(f"{int(round(preset.vocal_enhance_intensity * 100))}%")
+            self._enhance_val_label.setText(
+                f"{int(round(preset.vocal_enhance_intensity * 100))}%"
+            )
 
             notch_val = preset.notch_depth_db
             slider_notch = int(round(notch_val * 10))
@@ -476,14 +497,18 @@ class VocalPanel(QWidget):
             loaded = presets.load_preset(name, self._cache_manager)
         except Exception as exc:
             logger.error("Failed to load preset %r: %s", name, exc)
-            QMessageBox.warning(self, "Preset Load Error", f"Failed to load preset '{name}': {exc}")
+            QMessageBox.warning(
+                self, "Preset Load Error", f"Failed to load preset '{name}': {exc}"
+            )
         else:
             self.set_settings(loaded)
             logger.info("Loaded preset %r into VocalPanel", name)
 
     @Slot()
     def on_save_preset_clicked(self) -> None:
-        name, ok = QInputDialog.getText(self, "Save Preset As", "Enter a name for the new preset:")
+        name, ok = QInputDialog.getText(
+            self, "Save Preset As", "Enter a name for the new preset:"
+        )
         if not ok or not name.strip():
             return
 
@@ -494,7 +519,9 @@ class VocalPanel(QWidget):
             presets.save_preset(name, current_preset, self._cache_manager)
         except Exception as exc:
             logger.error("Failed to save preset %r: %s", name, exc)
-            QMessageBox.critical(self, "Save Preset Error", f"Failed to save preset '{name}': {exc}")
+            QMessageBox.critical(
+                self, "Save Preset Error", f"Failed to save preset '{name}': {exc}"
+            )
         else:
             logger.info("Saved preset %r from VocalPanel", name)
             self.load_presets_list()
@@ -554,11 +581,15 @@ class VocalPanel(QWidget):
         """Toggle visibility of the expandable QA metric details panel."""
         self._qa_details_panel.setVisible(not self._qa_details_panel.isVisible())
 
-    def update_qa_from_file(self, file_path: Path | str, silence_threshold_db: float = -30.0) -> dict[str, QAMetricResult]:
+    def update_qa_from_file(
+        self, file_path: Path | str, silence_threshold_db: float = -30.0
+    ) -> dict[str, QAMetricResult]:
         """Run app.core.qa_gate warn-only metrics on a rendered audio file and surface caution badge if flagged."""
         try:
             audio, samplerate = sf.read(str(file_path), always_2d=True, dtype="float64")
-            return self.update_qa_metrics(audio, samplerate, silence_threshold_db=silence_threshold_db)
+            return self.update_qa_metrics(
+                audio, samplerate, silence_threshold_db=silence_threshold_db
+            )
         except Exception as exc:
             logger.warning("Failed to evaluate QA metrics for %s: %s", file_path, exc)
             self.clear_qa_warning()
@@ -572,7 +603,9 @@ class VocalPanel(QWidget):
     ) -> dict[str, QAMetricResult]:
         """Evaluate the three warn-only QA metrics on audio array and update caution badge state."""
         pitch_res = qa_gate.measure_pitch_variance(audio, samplerate)
-        hf_res = qa_gate.measure_high_frequency_energy(audio, samplerate, silence_threshold_db=silence_threshold_db)
+        hf_res = qa_gate.measure_high_frequency_energy(
+            audio, samplerate, silence_threshold_db=silence_threshold_db
+        )
         crest_res = qa_gate.measure_crest_factor(audio)
 
         results = {
@@ -594,7 +627,9 @@ class VocalPanel(QWidget):
 
         count = len(warning_items)
         plural = "s" if count > 1 else ""
-        self._qa_badge.setText(f"⚠️ QA Caution: {count} signal quality metric{plural} flagged (click for details)")
+        self._qa_badge.setText(
+            f"⚠️ QA Caution: {count} signal quality metric{plural} flagged (click for details)"
+        )
 
         tooltip_lines = ["⚠️ Audio Quality Caution (Warn Only):"]
         details_lines = [
@@ -627,7 +662,9 @@ class VocalPanel(QWidget):
             status = "⚠️ WARN" if res.warning else "✓ OK"
             status_color = "#ff7675" if res.warning else "#55efc4"
 
-            tooltip_lines.append(f"• [{status}] {label}: {val_str} (warn limit: {thresh_str})")
+            tooltip_lines.append(
+                f"• [{status}] {label}: {val_str} (warn limit: {thresh_str})"
+            )
             if res.warning:
                 tooltip_lines.append(f"  Reason: {desc}")
 

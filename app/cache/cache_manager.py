@@ -83,6 +83,7 @@ class CacheManager:
         path = self._root / track_id
         if path.exists():
             import shutil
+
             shutil.rmtree(path)
 
     @staticmethod
@@ -108,6 +109,7 @@ class CacheManager:
             return False
         try:
             import soundfile as sf
+
             sf.info(str(path))
             return True
         except Exception:
@@ -151,7 +153,12 @@ class CacheManager:
                         pass
 
         # 2. Collect render files
-        protected_dirs = {self.PRESETS_DIRNAME, self.LOGS_DIRNAME, self.MODELS_DIRNAME, self.BIN_DIRNAME}
+        protected_dirs = {
+            self.PRESETS_DIRNAME,
+            self.LOGS_DIRNAME,
+            self.MODELS_DIRNAME,
+            self.BIN_DIRNAME,
+        }
         if self._root.is_dir():
             for track_dir in self._root.iterdir():
                 if track_dir.is_dir() and track_dir.name not in protected_dirs:
@@ -187,4 +194,3 @@ class CacheManager:
     @staticmethod
     def _ensure_dir(path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
-

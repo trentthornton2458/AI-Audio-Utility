@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import os
 import shutil
+from pathlib import Path
+
 import imageio_ffmpeg
 import soundfile as sf
 import torch
@@ -40,6 +40,7 @@ def ensure_ffmpeg_in_path(bin_dir: Path) -> Path:
         # 1. Explicitly configure pydub to use this exact binary
         try:
             import pydub
+
             pydub.AudioSegment.converter = str(target_exe)
             logger.info("Configured pydub converter to %s", target_exe)
         except ImportError:
@@ -48,6 +49,7 @@ def ensure_ffmpeg_in_path(bin_dir: Path) -> Path:
         # 2. Monkey-patch audio-separator's ffmpeg check to avoid PATH issues
         try:
             from audio_separator.separator.separator import Separator
+
             Separator.check_ffmpeg_installed = lambda self: None
             logger.info("Monkey-patched audio-separator ffmpeg check")
         except ImportError:
@@ -59,7 +61,9 @@ def ensure_ffmpeg_in_path(bin_dir: Path) -> Path:
         return Path("ffmpeg")
 
 
-def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tuple[Path, Path]:
+def separate_stems(
+    normalized_wav_path: Path, cache_manager: CacheManager
+) -> tuple[Path, Path]:
     """Split a normalized WAV into (vocal_stem_path, instrumental_stem_path) using BS-RoFormer.
 
     Stems are cached at cache/<track_id>/stems/vocal.wav and instrumental.wav, where
@@ -80,16 +84,27 @@ def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tu
     instrumental_path = stems_dir / INSTRUMENTAL_FILENAME
     residual_path = stems_dir / RESIDUAL_FILENAME
 
-    if cache_manager.verify_stem_wav(vocal_path) and cache_manager.verify_stem_wav(instrumental_path):
-        logger.info("Using cached stems for track %s: %s, %s", track_id, vocal_path, instrumental_path)
+    if cache_manager.verify_stem_wav(vocal_path) and cache_manager.verify_stem_wav(
+        instrumental_path
+    ):
+        logger.info(
+            "Using cached stems for track %s: %s, %s",
+            track_id,
+            vocal_path,
+            instrumental_path,
+        )
         if not cache_manager.verify_stem_wav(residual_path):
-            _write_residual_stem(normalized_wav_path, vocal_path, instrumental_path, residual_path)
+            _write_residual_stem(
+                normalized_wav_path, vocal_path, instrumental_path, residual_path
+            )
         return vocal_path, instrumental_path
 
     ensure_ffmpeg_in_path(cache_manager.bin_dir)
 
     if torch.cuda.is_available():
-        logger.info("CUDA available; running stem separation on GPU for track %s", track_id)
+        logger.info(
+            "CUDA available; running stem separation on GPU for track %s", track_id
+        )
     else:
         logger.warning(
             "CUDA not available; falling back to CPU for stem separation on track %s (this will be slow)",
@@ -122,14 +137,24 @@ def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tu
             f"(separator returned {produced})"
         )
 
-    _write_residual_stem(normalized_wav_path, vocal_path, instrumental_path, residual_path)
+    _write_residual_stem(
+        normalized_wav_path, vocal_path, instrumental_path, residual_path
+    )
 
-    logger.info("Separated stems for track %s -> %s, %s", track_id, vocal_path, instrumental_path)
+    logger.info(
+        "Separated stems for track %s -> %s, %s",
+        track_id,
+        vocal_path,
+        instrumental_path,
+    )
     return vocal_path, instrumental_path
 
 
 def _write_residual_stem(
-    normalized_wav_path: Path, vocal_path: Path, instrumental_path: Path, residual_path: Path
+    normalized_wav_path: Path,
+    vocal_path: Path,
+    instrumental_path: Path,
+    residual_path: Path,
 ) -> None:
     """Compute and cache the residual/leftover signal not captured by either predicted stem.
 
@@ -137,18 +162,26 @@ def _write_residual_stem(
     three (channel count and sample count), since BS-RoFormer's chunked inference can produce
     stems a few samples shorter/longer than the source.
     """
-    original, samplerate = sf.read(str(normalized_wav_path), always_2d=True, dtype="float64")
+    original, samplerate = sf.read(
+        str(normalized_wav_path), always_2d=True, dtype="float64"
+    )
     vocal, _ = sf.read(str(vocal_path), always_2d=True, dtype="float64")
     instrumental, _ = sf.read(str(instrumental_path), always_2d=True, dtype="float64")
 
     length = min(original.shape[0], vocal.shape[0], instrumental.shape[0])
     channels = min(original.shape[1], vocal.shape[1], instrumental.shape[1])
     residual = (
-        original[:length, :channels] - vocal[:length, :channels] - instrumental[:length, :channels]
+        original[:length, :channels]
+        - vocal[:length, :channels]
+        - instrumental[:length, :channels]
     )
 
     sf.write(str(residual_path), residual, samplerate, subtype=RESIDUAL_SUBTYPE)
-    logger.info("Wrote residual stem for %s -> %s", normalized_wav_path.parent.name, residual_path)
+    logger.info(
+        "Wrote residual stem for %s -> %s",
+        normalized_wav_path.parent.name,
+        residual_path,
+    )
 
 
 def _resolve_output_path(name: str, stems_dir: Path) -> Path:

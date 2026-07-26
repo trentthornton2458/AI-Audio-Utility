@@ -7,7 +7,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PySide6.QtWidgets import QLineEdit, QWizard, QWizardPage
 
-from app.setup.model_downloader import ModelDownloadError, RubberbandDownloadError, REQUIRED_MODEL_SPECS
+from app.setup.model_downloader import (
+    REQUIRED_MODEL_SPECS,
+    ModelDownloadError,
+    RubberbandDownloadError,
+)
 from app.ui.setup_wizard import (
     CompletionPage,
     GeminiApiKeyPage,
@@ -53,10 +57,12 @@ def test_hardware_check_page_gpu_detected_sufficient_ram(qtbot):
         "ram_gb": 16.0,
     }
 
-    with patch("torch.cuda.is_available", return_value=True), \
-         patch("torch.cuda.get_device_name", return_value="NVIDIA GeForce RTX 4090"), \
-         patch("torch.cuda.device_count", return_value=1), \
-         patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report):
+    with (
+        patch("torch.cuda.is_available", return_value=True),
+        patch("torch.cuda.get_device_name", return_value="NVIDIA GeForce RTX 4090"),
+        patch("torch.cuda.device_count", return_value=1),
+        patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report),
+    ):
         page.on_check_hardware()
         assert page._gpu_detected is True
         assert page._status_text == "GPU detected: NVIDIA GeForce RTX 4090"
@@ -76,10 +82,12 @@ def test_hardware_check_page_gpu_detected_low_ram(qtbot):
         "ram_gb": 4.0,
     }
 
-    with patch("torch.cuda.is_available", return_value=True), \
-         patch("torch.cuda.get_device_name", return_value="NVIDIA GeForce RTX 4090"), \
-         patch("torch.cuda.device_count", return_value=1), \
-         patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report):
+    with (
+        patch("torch.cuda.is_available", return_value=True),
+        patch("torch.cuda.get_device_name", return_value="NVIDIA GeForce RTX 4090"),
+        patch("torch.cuda.device_count", return_value=1),
+        patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report),
+    ):
         page.on_check_hardware()
         assert page._gpu_detected is True
         assert page._status_text == "GPU detected: NVIDIA GeForce RTX 4090"
@@ -99,8 +107,10 @@ def test_hardware_check_page_cpu_fallback_low_ram_missing_driver(qtbot):
         "ram_gb": 6.0,
     }
 
-    with patch("torch.cuda.is_available", return_value=False), \
-         patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report):
+    with (
+        patch("torch.cuda.is_available", return_value=False),
+        patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report),
+    ):
         page.on_check_hardware()
         assert page._gpu_detected is False
         assert page._status_text == "No GPU detected — will run on CPU (slower)"
@@ -121,8 +131,10 @@ def test_hardware_check_page_cpu_fallback_sufficient_ram_pyside_warning(qtbot):
         "ram_gb": 32.0,
     }
 
-    with patch("torch.cuda.is_available", return_value=False), \
-         patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report):
+    with (
+        patch("torch.cuda.is_available", return_value=False),
+        patch("app.ui.setup_wizard.run_diagnostics", return_value=mock_report),
+    ):
         page.on_check_hardware()
         assert page._gpu_detected is False
         assert page._status_text == "No GPU detected — will run on CPU (slower)"
@@ -134,7 +146,9 @@ def test_gemini_api_key_page_blocks_until_key_entered(qtbot):
     page = GeminiApiKeyPage()
     qtbot.addWidget(page)
 
-    with patch("app.ui.setup_wizard.gemini_settings.get_gemini_api_key", return_value=None):
+    with patch(
+        "app.ui.setup_wizard.gemini_settings.get_gemini_api_key", return_value=None
+    ):
         page.initializePage()
 
     assert not page.isComplete()
@@ -159,7 +173,10 @@ def test_gemini_api_key_page_loads_existing_key(qtbot):
     page = GeminiApiKeyPage()
     qtbot.addWidget(page)
 
-    with patch("app.ui.setup_wizard.gemini_settings.get_gemini_api_key", return_value="stored-key"):
+    with patch(
+        "app.ui.setup_wizard.gemini_settings.get_gemini_api_key",
+        return_value="stored-key",
+    ):
         page.initializePage()
 
     assert page._key_edit.text() == "stored-key"
@@ -189,14 +206,14 @@ def test_gemini_api_key_page_save_failure_blocks_validation(qtbot):
 
 def test_model_download_page_progress_and_success(qtbot):
     mock_downloader = MagicMock()
-    
+
     mock_specs = [
         MagicMock(name="BS-RoFormer", filename="bs.ckpt"),
         MagicMock(name="resemble-enhance", filename="re.pth"),
     ]
     mock_specs[0].name = "BS-RoFormer"
     mock_specs[1].name = "resemble-enhance"
-    
+
     with patch("app.ui.setup_wizard.REQUIRED_MODEL_SPECS", mock_specs):
         page = ModelDownloadPage(downloader=mock_downloader)
         qtbot.addWidget(page)
@@ -222,14 +239,14 @@ def test_model_download_page_progress_and_success(qtbot):
 
 def test_model_download_page_failure_and_retry(qtbot):
     mock_downloader = MagicMock()
-    
+
     mock_specs = [
         MagicMock(name="BS-RoFormer", filename="bs.ckpt"),
         MagicMock(name="resemble-enhance", filename="re.pth"),
     ]
     mock_specs[0].name = "BS-RoFormer"
     mock_specs[1].name = "resemble-enhance"
-    
+
     with patch("app.ui.setup_wizard.REQUIRED_MODEL_SPECS", mock_specs):
         page = ModelDownloadPage(downloader=mock_downloader)
         qtbot.addWidget(page)
@@ -324,4 +341,3 @@ def test_rubberband_download_worker(qtbot):
         # Test cancellation state
         worker.cancel()
         assert worker.is_cancelled() is True
-

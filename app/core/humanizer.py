@@ -1,7 +1,8 @@
 """Humanizer stage: pyrubberband-driven micro-pitch drift that breaks Suno's robotic
 micro-pitch locking by modulating pitch continuously over time with a low-frequency
 oscillator, rather than applying one static pitch shift; plus an automatic breath/friction
-blend-back that restores detail BS-RoFormer's stem separation strips out of the vocal."""
+blend-back that restores detail BS-RoFormer's stem separation strips out of the vocal.
+"""
 
 from __future__ import annotations
 
@@ -45,7 +46,9 @@ CENTS_PER_SEMITONE = 100.0
 _rubberband_configured = False
 
 
-def apply_pitch_drift(audio: np.ndarray, sample_rate: int, intensity: float) -> np.ndarray:
+def apply_pitch_drift(
+    audio: np.ndarray, sample_rate: int, intensity: float
+) -> np.ndarray:
     """Apply LFO-driven micro-pitch drift to `audio`.
 
     intensity in [0.0, 1.0] maps linearly to a drift depth of +/-[DRIFT_DEPTH_MIN_CENTS,
@@ -63,7 +66,9 @@ def apply_pitch_drift(audio: np.ndarray, sample_rate: int, intensity: float) -> 
     if intensity <= 0.0:
         return np.array(audio, copy=True)
 
-    depth_cents = DRIFT_DEPTH_MIN_CENTS + intensity * (DRIFT_DEPTH_MAX_CENTS - DRIFT_DEPTH_MIN_CENTS)
+    depth_cents = DRIFT_DEPTH_MIN_CENTS + intensity * (
+        DRIFT_DEPTH_MAX_CENTS - DRIFT_DEPTH_MIN_CENTS
+    )
     rate_hz = DRIFT_RATE_MIN_HZ + intensity * (DRIFT_RATE_MAX_HZ - DRIFT_RATE_MIN_HZ)
 
     _configure_rubberband_binary()
@@ -94,7 +99,9 @@ def apply_pitch_drift(audio: np.ndarray, sample_rate: int, intensity: float) -> 
         segment = padded[start:end]
         center_time_s = (start + window_size / 2.0 - pad) / sample_rate
         n_steps = _lfo_cents(center_time_s, rate_hz, depth_cents) / CENTS_PER_SEMITONE
-        shifted = _match_length(_pitch_shift_window(segment, sample_rate, n_steps), window_size)
+        shifted = _match_length(
+            _pitch_shift_window(segment, sample_rate, n_steps), window_size
+        )
         output[start:end] += shifted * window[:, np.newaxis]
         start += hop_size
 
@@ -104,7 +111,9 @@ def apply_pitch_drift(audio: np.ndarray, sample_rate: int, intensity: float) -> 
     return result.astype(audio.dtype)
 
 
-def apply_breath_blend(processed_vocal: np.ndarray, residual_signal: np.ndarray, sample_rate: int) -> np.ndarray:
+def apply_breath_blend(
+    processed_vocal: np.ndarray, residual_signal: np.ndarray, sample_rate: int
+) -> np.ndarray:
     """Blend a fixed, automatic amount of the stem-separation residual back into `processed_vocal`
     to restore breath/friction detail BS-RoFormer's isolation strips out.
 
@@ -126,11 +135,15 @@ def apply_breath_blend(processed_vocal: np.ndarray, residual_signal: np.ndarray,
     residual = np.asarray(residual_signal, dtype=np.float64)[:length]
 
     mono_residual = residual.ndim == 1
-    channels_first = (residual[np.newaxis, :] if mono_residual else residual.T).astype(np.float32)
+    channels_first = (residual[np.newaxis, :] if mono_residual else residual.T).astype(
+        np.float32
+    )
 
     hpf_board = Pedalboard([HighpassFilter(cutoff_frequency_hz=BREATH_BLEND_HPF_HZ)])
     filtered = hpf_board(channels_first, sample_rate)
-    filtered_residual = (filtered[0] if mono_residual else filtered.T).astype(np.float64)
+    filtered_residual = (filtered[0] if mono_residual else filtered.T).astype(
+        np.float64
+    )
 
     gain = _db_to_linear(BREATH_BLEND_GAIN_DB)
     blended = vocal + gain * filtered_residual
@@ -166,7 +179,9 @@ def _configure_rubberband_binary() -> None:
     logger.info("Configured rubberband binary for pyrubberband: %s", binary_path)
 
 
-def _pitch_shift_window(window: np.ndarray, sample_rate: int, n_steps: float) -> np.ndarray:
+def _pitch_shift_window(
+    window: np.ndarray, sample_rate: int, n_steps: float
+) -> np.ndarray:
     """Thin wrapper around pyrubberband.pitch_shift, isolated so tests can substitute a
     synthetic (non-GPL-binary-dependent) implementation."""
     if n_steps == 0.0:

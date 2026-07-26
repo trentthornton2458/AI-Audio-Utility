@@ -26,7 +26,8 @@ def test_custom_reference_override_path_is_settable():
 
 def test_from_preset_does_not_populate_override_path():
     """custom_reference_override_path is a global preference, not part of Preset, so building
-    Settings from a Preset must not invent a value for it -- it should stay at its default."""
+    Settings from a Preset must not invent a value for it -- it should stay at its default.
+    """
     preset = Preset(vocal_gain_db=3.0)
 
     settings = Settings.from_preset(preset)
@@ -37,7 +38,8 @@ def test_from_preset_does_not_populate_override_path():
 
 def test_to_preset_does_not_leak_override_path():
     """The override path must never end up in the persisted/schema-validated Preset -- round
-    tripping through to_preset()/to_dict() should neither fail nor silently include it."""
+    tripping through to_preset()/to_dict() should neither fail nor silently include it.
+    """
     settings = Settings(custom_reference_override_path=Path("/some/custom/dir"))
 
     preset = settings.to_preset()

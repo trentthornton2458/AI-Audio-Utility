@@ -1,6 +1,7 @@
 """Instrumental stem pipeline: neural denoise pass (pre-DSP), gentler adjustable Pedalboard DSP
 chain (low-end mud cut + mild de-hiss high-shelf), neural enhance pass (post-DSP, the last AI
-stage), and a QA-gated capped residual blend of the enhance output back into the DSP signal."""
+stage), and a QA-gated capped residual blend of the enhance output back into the DSP signal.
+"""
 
 from __future__ import annotations
 
@@ -103,7 +104,9 @@ def run_enhance_pass(
     )
 
 
-def apply_dsp_chain(denoised_instrumental_path: Path, eq_params: InstrumentalEqParams, out_path: Path) -> Path:
+def apply_dsp_chain(
+    denoised_instrumental_path: Path, eq_params: InstrumentalEqParams, out_path: Path
+) -> Path:
     """Run the gentle adjustable Pedalboard DSP chain on a (denoise-passed) instrumental stem.
 
     Chain: highpass at eq_params.mud_cut_hz (low-end mud cut) -> high-shelf at
@@ -113,16 +116,24 @@ def apply_dsp_chain(denoised_instrumental_path: Path, eq_params: InstrumentalEqP
     and be tuned per track.
     """
     mud_cut_hz = _clamp(eq_params.mud_cut_hz, MUD_CUT_HZ_MIN, MUD_CUT_HZ_MAX)
-    dehiss_shelf_hz = _clamp(eq_params.dehiss_shelf_hz, DEHISS_SHELF_HZ_MIN, DEHISS_SHELF_HZ_MAX)
-    dehiss_gain_db = _clamp(eq_params.dehiss_gain_db, DEHISS_GAIN_DB_MIN, DEHISS_GAIN_DB_MAX)
+    dehiss_shelf_hz = _clamp(
+        eq_params.dehiss_shelf_hz, DEHISS_SHELF_HZ_MIN, DEHISS_SHELF_HZ_MAX
+    )
+    dehiss_gain_db = _clamp(
+        eq_params.dehiss_gain_db, DEHISS_GAIN_DB_MIN, DEHISS_GAIN_DB_MAX
+    )
 
-    audio, samplerate = sf.read(str(denoised_instrumental_path), always_2d=True, dtype="float32")
+    audio, samplerate = sf.read(
+        str(denoised_instrumental_path), always_2d=True, dtype="float32"
+    )
     channels_first = audio.T
 
     board = Pedalboard(
         [
             HighpassFilter(cutoff_frequency_hz=mud_cut_hz),
-            HighShelfFilter(cutoff_frequency_hz=dehiss_shelf_hz, gain_db=dehiss_gain_db),
+            HighShelfFilter(
+                cutoff_frequency_hz=dehiss_shelf_hz, gain_db=dehiss_gain_db
+            ),
         ]
     )
     processed = board(channels_first, samplerate)

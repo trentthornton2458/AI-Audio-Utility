@@ -101,8 +101,12 @@ class InstrumentalPanel(QWidget):
         overall_layout.setContentsMargins(8, 6, 8, 6)
 
         self._overall_cleanup_cb = QCheckBox("Enable Instrumental Cleanup Chain")
-        self._overall_cleanup_cb.setChecked(self._current_settings.instrumental_denoise_enabled)
-        self._overall_cleanup_cb.setStyleSheet("QCheckBox { color: #55efc4; font-weight: bold; font-size: 13px; }")
+        self._overall_cleanup_cb.setChecked(
+            self._current_settings.instrumental_denoise_enabled
+        )
+        self._overall_cleanup_cb.setStyleSheet(
+            "QCheckBox { color: #55efc4; font-weight: bold; font-size: 13px; }"
+        )
         self._overall_cleanup_cb.toggled.connect(self.on_overall_cleanup_toggled)
         overall_layout.addWidget(self._overall_cleanup_cb)
         overall_layout.addStretch()
@@ -171,7 +175,9 @@ class InstrumentalPanel(QWidget):
         # Denoise Row
         self._denoise_widget = IntensitySlider(
             "Enable Denoise",
-            initial_value=int(round(self._current_settings.instrumental_denoise_intensity * 100)),
+            initial_value=int(
+                round(self._current_settings.instrumental_denoise_intensity * 100)
+            ),
             checked=self._current_settings.instrumental_denoise_enabled,
         )
         self._denoise_cb = self._denoise_widget.checkbox
@@ -184,7 +190,9 @@ class InstrumentalPanel(QWidget):
         # Enhance Row (hard-capped at 35% -- see app.core.qa_gate.MAX_ENHANCE_GAIN)
         self._enhance_widget = IntensitySlider(
             "Enable Harmonic Enhancement",
-            initial_value=int(round(self._current_settings.instrumental_enhance_intensity * 100)),
+            initial_value=int(
+                round(self._current_settings.instrumental_enhance_intensity * 100)
+            ),
             checked=self._current_settings.instrumental_enhance_enabled,
             max_value=35,
         )
@@ -211,7 +219,9 @@ class InstrumentalPanel(QWidget):
         mud_header = QHBoxLayout()
         mud_title = QLabel("<b>Low-End Mud Cut (Hz)</b>")
         mud_title.setStyleSheet("color: #ffffff;")
-        mud_desc = QLabel("<span style='color: #8a8d9b; font-size: 11px;'>(Highpass cutoff trimming low-end rumble)</span>")
+        mud_desc = QLabel(
+            "<span style='color: #8a8d9b; font-size: 11px;'>(Highpass cutoff trimming low-end rumble)</span>"
+        )
 
         mud_val = self._current_settings.instrumental_mud_cut_hz
         self._mud_cut_val_label = QLabel(f"{mud_val:.1f} Hz")
@@ -236,7 +246,9 @@ class InstrumentalPanel(QWidget):
         shelf_header = QHBoxLayout()
         shelf_title = QLabel("<b>De-Hiss Shelf Frequency (Hz)</b>")
         shelf_title.setStyleSheet("color: #ffffff;")
-        shelf_desc = QLabel("<span style='color: #8a8d9b; font-size: 11px;'>(High-shelf corner frequency)</span>")
+        shelf_desc = QLabel(
+            "<span style='color: #8a8d9b; font-size: 11px;'>(High-shelf corner frequency)</span>"
+        )
 
         shelf_val = self._current_settings.instrumental_dehiss_shelf_hz
         self._dehiss_shelf_val_label = QLabel(f"{int(shelf_val)} Hz")
@@ -249,7 +261,9 @@ class InstrumentalPanel(QWidget):
         shelf_row.addLayout(shelf_header)
 
         self._dehiss_shelf_slider = QSlider(Qt.Orientation.Horizontal)
-        self._dehiss_shelf_slider.setRange(int(DEHISS_SHELF_HZ_MIN), int(DEHISS_SHELF_HZ_MAX))
+        self._dehiss_shelf_slider.setRange(
+            int(DEHISS_SHELF_HZ_MIN), int(DEHISS_SHELF_HZ_MAX)
+        )
         self._dehiss_shelf_slider.setSingleStep(100)
         self._dehiss_shelf_slider.setValue(int(shelf_val))
         self._dehiss_shelf_slider.setStyleSheet(make_slider_stylesheet())
@@ -262,7 +276,9 @@ class InstrumentalPanel(QWidget):
         dehiss_gain_header = QHBoxLayout()
         dehiss_gain_title = QLabel("<b>De-Hiss Shelf Gain (dB)</b>")
         dehiss_gain_title.setStyleSheet("color: #ffffff;")
-        dehiss_gain_desc = QLabel("<span style='color: #8a8d9b; font-size: 11px;'>(High-shelf gain reduction)</span>")
+        dehiss_gain_desc = QLabel(
+            "<span style='color: #8a8d9b; font-size: 11px;'>(High-shelf gain reduction)</span>"
+        )
 
         dehiss_gain_val = self._current_settings.instrumental_dehiss_gain_db
         self._dehiss_gain_val_label = QLabel(f"{dehiss_gain_val:.1f} dB")
@@ -275,9 +291,13 @@ class InstrumentalPanel(QWidget):
         dehiss_gain_row.addLayout(dehiss_gain_header)
 
         self._dehiss_gain_slider = QSlider(Qt.Orientation.Horizontal)
-        self._dehiss_gain_slider.setRange(int(DEHISS_GAIN_DB_MIN * 10), int(DEHISS_GAIN_DB_MAX * 10))
+        self._dehiss_gain_slider.setRange(
+            int(DEHISS_GAIN_DB_MIN * 10), int(DEHISS_GAIN_DB_MAX * 10)
+        )
         self._dehiss_gain_slider.setValue(int(round(dehiss_gain_val * 10)))
-        self._dehiss_gain_slider.setStyleSheet(make_slider_stylesheet(accent_color="#ff7675"))
+        self._dehiss_gain_slider.setStyleSheet(
+            make_slider_stylesheet(accent_color="#ff7675")
+        )
         self._dehiss_gain_slider.valueChanged.connect(self.on_dehiss_gain_changed)
         dehiss_gain_row.addWidget(self._dehiss_gain_slider)
         eq_layout.addLayout(dehiss_gain_row)
@@ -336,13 +356,27 @@ class InstrumentalPanel(QWidget):
         overall_enabled = self._overall_cleanup_cb.isChecked()
 
         if overall_enabled:
-            self._current_settings.instrumental_denoise_enabled = self._denoise_widget.is_checked()
-            self._current_settings.instrumental_denoise_intensity = self._denoise_widget.intensity()
-            self._current_settings.instrumental_enhance_enabled = self._enhance_widget.is_checked()
-            self._current_settings.instrumental_enhance_intensity = self._enhance_widget.intensity()
-            self._current_settings.instrumental_mud_cut_hz = float(self._mud_cut_slider.value())
-            self._current_settings.instrumental_dehiss_shelf_hz = float(self._dehiss_shelf_slider.value())
-            self._current_settings.instrumental_dehiss_gain_db = self._dehiss_gain_slider.value() / 10.0
+            self._current_settings.instrumental_denoise_enabled = (
+                self._denoise_widget.is_checked()
+            )
+            self._current_settings.instrumental_denoise_intensity = (
+                self._denoise_widget.intensity()
+            )
+            self._current_settings.instrumental_enhance_enabled = (
+                self._enhance_widget.is_checked()
+            )
+            self._current_settings.instrumental_enhance_intensity = (
+                self._enhance_widget.intensity()
+            )
+            self._current_settings.instrumental_mud_cut_hz = float(
+                self._mud_cut_slider.value()
+            )
+            self._current_settings.instrumental_dehiss_shelf_hz = float(
+                self._dehiss_shelf_slider.value()
+            )
+            self._current_settings.instrumental_dehiss_gain_db = (
+                self._dehiss_gain_slider.value() / 10.0
+            )
         else:
             self._current_settings.instrumental_denoise_enabled = False
             self._current_settings.instrumental_enhance_enabled = False
@@ -373,15 +407,23 @@ class InstrumentalPanel(QWidget):
             self._enhance_widget.set_checked(preset.instrumental_enhance_enabled)
             self._enhance_widget.set_intensity(preset.instrumental_enhance_intensity)
 
-            mud_cut = max(MUD_CUT_HZ_MIN, min(MUD_CUT_HZ_MAX, preset.instrumental_mud_cut_hz))
+            mud_cut = max(
+                MUD_CUT_HZ_MIN, min(MUD_CUT_HZ_MAX, preset.instrumental_mud_cut_hz)
+            )
             self._mud_cut_slider.setValue(int(round(mud_cut)))
             self._mud_cut_val_label.setText(f"{mud_cut:.1f} Hz")
 
-            shelf_hz = max(DEHISS_SHELF_HZ_MIN, min(DEHISS_SHELF_HZ_MAX, preset.instrumental_dehiss_shelf_hz))
+            shelf_hz = max(
+                DEHISS_SHELF_HZ_MIN,
+                min(DEHISS_SHELF_HZ_MAX, preset.instrumental_dehiss_shelf_hz),
+            )
             self._dehiss_shelf_slider.setValue(int(round(shelf_hz)))
             self._dehiss_shelf_val_label.setText(f"{int(shelf_hz)} Hz")
 
-            dehiss_gain = max(DEHISS_GAIN_DB_MIN, min(DEHISS_GAIN_DB_MAX, preset.instrumental_dehiss_gain_db))
+            dehiss_gain = max(
+                DEHISS_GAIN_DB_MIN,
+                min(DEHISS_GAIN_DB_MAX, preset.instrumental_dehiss_gain_db),
+            )
             self._dehiss_gain_slider.setValue(int(round(dehiss_gain * 10)))
             self._dehiss_gain_val_label.setText(f"{dehiss_gain:.1f} dB")
 
@@ -423,7 +465,9 @@ class InstrumentalPanel(QWidget):
             loaded = presets.load_preset(name, self._cache_manager)
         except Exception as exc:
             logger.error("Failed to load preset %r: %s", name, exc)
-            QMessageBox.warning(self, "Preset Load Error", f"Failed to load preset '{name}': {exc}")
+            QMessageBox.warning(
+                self, "Preset Load Error", f"Failed to load preset '{name}': {exc}"
+            )
         else:
             self.set_settings(loaded)
             logger.info("Loaded preset %r into InstrumentalPanel", name)
@@ -431,7 +475,9 @@ class InstrumentalPanel(QWidget):
 
     @Slot()
     def on_save_preset_clicked(self) -> None:
-        name, ok = QInputDialog.getText(self, "Save Preset As", "Enter a name for the new preset:")
+        name, ok = QInputDialog.getText(
+            self, "Save Preset As", "Enter a name for the new preset:"
+        )
         if not ok or not name.strip():
             return
 
@@ -442,7 +488,9 @@ class InstrumentalPanel(QWidget):
             presets.save_preset(name, current_preset, self._cache_manager)
         except Exception as exc:
             logger.error("Failed to save preset %r: %s", name, exc)
-            QMessageBox.critical(self, "Save Preset Error", f"Failed to save preset '{name}': {exc}")
+            QMessageBox.critical(
+                self, "Save Preset Error", f"Failed to save preset '{name}': {exc}"
+            )
         else:
             logger.info("Saved preset %r from InstrumentalPanel", name)
             self.load_presets_list()
@@ -487,6 +535,8 @@ class InstrumentalPanel(QWidget):
     @Slot()
     def on_apply_clicked(self) -> None:
         settings = self.get_settings()
-        logger.info("Apply / Render clicked on InstrumentalPanel with settings: %s", settings)
+        logger.info(
+            "Apply / Render clicked on InstrumentalPanel with settings: %s", settings
+        )
         self.settingsChanged.emit(settings)
         self.renderRequested.emit(settings)

@@ -51,7 +51,9 @@ class GeminiSettingsDialog(QDialog):
 
         # --- Section 1: Gemini API Key ---
         gemini_card = QFrame()
-        gemini_card.setStyleSheet("QFrame { background-color: #1e1f2b; border: 1px solid #2d2f3d; border-radius: 8px; padding: 12px; }")
+        gemini_card.setStyleSheet(
+            "QFrame { background-color: #1e1f2b; border: 1px solid #2d2f3d; border-radius: 8px; padding: 12px; }"
+        )
         gemini_layout = QVBoxLayout(gemini_card)
         gemini_layout.setSpacing(8)
 
@@ -84,7 +86,9 @@ class GeminiSettingsDialog(QDialog):
 
         # --- Section 2: Reference Audio Stems Override ---
         ref_card = QFrame()
-        ref_card.setStyleSheet("QFrame { background-color: #1e1f2b; border: 1px solid #2d2f3d; border-radius: 8px; padding: 12px; }")
+        ref_card.setStyleSheet(
+            "QFrame { background-color: #1e1f2b; border: 1px solid #2d2f3d; border-radius: 8px; padding: 12px; }"
+        )
         ref_layout = QVBoxLayout(ref_card)
         ref_layout.setSpacing(8)
 
@@ -105,7 +109,9 @@ class GeminiSettingsDialog(QDialog):
         ref_row = QHBoxLayout()
         ref_row.setSpacing(8)
         self._ref_path_edit = QLineEdit(str(curr_override) if curr_override else "")
-        self._ref_path_edit.setPlaceholderText("Select folder containing reference .wav stems...")
+        self._ref_path_edit.setPlaceholderText(
+            "Select folder containing reference .wav stems..."
+        )
         self._ref_path_edit.textChanged.connect(self._on_ref_path_changed)
         ref_row.addWidget(self._ref_path_edit, 1)
 
@@ -129,7 +135,10 @@ class GeminiSettingsDialog(QDialog):
         layout.addWidget(ref_card)
 
         # Dialog buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
         button_box.accepted.connect(self.on_save_clicked)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
@@ -166,7 +175,9 @@ class GeminiSettingsDialog(QDialog):
 
     @Slot(bool)
     def _on_show_toggled(self, checked: bool) -> None:
-        self._key_edit.setEchoMode(QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password)
+        self._key_edit.setEchoMode(
+            QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
+        )
 
     @Slot(str)
     def _on_ref_path_changed(self, text: str) -> None:
@@ -208,10 +219,12 @@ class GeminiSettingsDialog(QDialog):
                 )
                 return
             set_custom_reference_override_path(ref_path)
-            logger.info("Saved custom reference override path from settings dialog: %s", ref_path)
+            logger.info(
+                "Saved custom reference override path from settings dialog: %s",
+                ref_path,
+            )
         else:
             set_custom_reference_override_path(None)
             logger.info("Cleared custom reference override path from settings dialog")
 
         self.accept()
-

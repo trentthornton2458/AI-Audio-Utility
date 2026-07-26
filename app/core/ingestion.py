@@ -66,12 +66,19 @@ def _decode_audio(input_path: Path) -> tuple[np.ndarray, int]:
         try:
             data, samplerate = sf.read(str(input_path), always_2d=True, dtype="float64")
         except Exception as exc:
-            logger.warning("soundfile failed to decode %s (%s); falling back to ffmpeg", input_path, exc)
+            logger.warning(
+                "soundfile failed to decode %s (%s); falling back to ffmpeg",
+                input_path,
+                exc,
+            )
         else:
             if samplerate == TARGET_SAMPLE_RATE:
                 return data, samplerate
             logger.info(
-                "%s is %dHz, resampling to %dHz via ffmpeg", input_path, samplerate, TARGET_SAMPLE_RATE
+                "%s is %dHz, resampling to %dHz via ffmpeg",
+                input_path,
+                samplerate,
+                TARGET_SAMPLE_RATE,
             )
 
     return _decode_with_ffmpeg(input_path)
@@ -97,17 +104,27 @@ def _decode_with_ffmpeg(input_path: Path) -> tuple[np.ndarray, int]:
     try:
         result = subprocess.run(command, capture_output=True, check=False)
     except OSError as exc:
-        raise UnsupportedAudioFormatError(f"Failed to launch bundled ffmpeg for {input_path}: {exc}") from exc
+        raise UnsupportedAudioFormatError(
+            f"Failed to launch bundled ffmpeg for {input_path}: {exc}"
+        ) from exc
 
     if result.returncode != 0:
-        stderr_tail = result.stderr.decode("utf-8", errors="replace").strip().splitlines()[-1:] if result.stderr else []
+        stderr_tail = (
+            result.stderr.decode("utf-8", errors="replace").strip().splitlines()[-1:]
+            if result.stderr
+            else []
+        )
         raise UnsupportedAudioFormatError(
             f"ffmpeg could not decode {input_path}: {stderr_tail[0] if stderr_tail else 'unknown error'}"
         )
 
     try:
-        data, samplerate = sf.read(io.BytesIO(result.stdout), always_2d=True, dtype="float64")
+        data, samplerate = sf.read(
+            io.BytesIO(result.stdout), always_2d=True, dtype="float64"
+        )
     except Exception as exc:
-        raise UnsupportedAudioFormatError(f"Could not parse ffmpeg output for {input_path}: {exc}") from exc
+        raise UnsupportedAudioFormatError(
+            f"Could not parse ffmpeg output for {input_path}: {exc}"
+        ) from exc
 
     return data, samplerate
