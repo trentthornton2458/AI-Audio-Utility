@@ -46,3 +46,14 @@ if _no_console and os.name == "nt":
                 pass
     except OSError:
         pass
+
+# In a frozen PyInstaller build, importlib.metadata.version() raises
+# PackageNotFoundError for any package whose .dist-info was not explicitly
+# bundled by copy_metadata() in the .spec file.  Many libraries catch that and
+# fall back to __version__ = "unknown", which then crashes downstream
+# packaging.version.Version() calls.  Patch early, before any third-party
+# imports.
+from app.core.platform_compat import pyinstaller_metadata_shim  # noqa: E402
+
+pyinstaller_metadata_shim()
+

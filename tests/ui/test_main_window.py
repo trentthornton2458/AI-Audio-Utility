@@ -249,11 +249,105 @@ def test_extract_stems_runs_separation_only_not_full_render(qtbot, tmp_path):
     # Finished slot updates status and clears the active job
     vocal = tmp_path / "vocal.wav"
     instrumental = tmp_path / "instrumental.wav"
-    with patch("PySide6.QtWidgets.QMessageBox.information") as mock_info:
+    with patch("PySide6.QtWidgets.QMessageBox.information") as mock_info, patch(
+        "app.ui.main_window.gemini_settings.get_gemini_api_key", return_value=None
+    ):
         window.on_separation_finished(vocal, instrumental)
         mock_info.assert_called_once()
         assert window._active_separation_job is None
         assert not window._progress_bar.isVisible()
+
+
+def test_separation_finished_skips_analysis_without_api_key(qtbot, tmp_path):
+    mock_cache = MagicMock()
+    window = MainWindow(cache_manager=mock_cache)
+    qtbot.addWidget(window)
+
+    vocal = tmp_path / "vocal.wav"
+    instrumental = tmp_path / "instrumental.wav"
+
+    with patch("PySide6.QtWidgets.QMessageBox.information"), patch(
+        "app.ui.main_window.gemini_settings.get_gemini_api_key", return_value=None
+    ), patch("app.ui.main_window.StemAnalysisJob") as mock_job_cls:
+        window.on_separation_finished(vocal, instrumental)
+
+        mock_job_cls.assert_not_called()
+        assert "AI auto-tune skipped" in window._status_label.text()
+
+
+def test_separation_finished_starts_stem_analysis_with_api_key(qtbot, tmp_path):
+    mock_cache = MagicMock()
+    window = MainWindow(cache_manager=mock_cache)
+    qtbot.addWidget(window)
+
+    vocal = tmp_path / "vocal.wav"
+    instrumental = tmp_path / "instrumental.wav"
+
+    mock_job = MagicMock()
+    mock_job.isRunning.return_value = False
+
+    with patch("PySide6.QtWidgets.QMessageBox.information"), patch(
+        "app.ui.main_window.gemini_settings.get_gemini_api_key", return_value="test-key"
+    ), patch("app.ui.main_window.StemAnalysisJob", return_value=mock_job) as mock_job_cls:
+        window.on_separation_finished(vocal, instrumental)
+
+        mock_job_cls.assert_called_once_with(
+            vocal_path=vocal,
+            instrumental_path=instrumental,
+            api_key="test-key",
+            parent=window,
+        )
+        mock_job.start.assert_called_once()
+        assert window._active_stem_analysis_job is mock_job
+        assert "Analyzing stems" in window._status_label.text()
+
+
+def test_stem_analysis_finished_applies_updates_to_panels(qtbot, tmp_path):
+    mock_cache = MagicMock()
+    window = MainWindow(cache_manager=mock_cache)
+    qtbot.addWidget(window)
+    window._active_stem_analysis_job = MagicMock()
+
+    vocal_updates = {"vocal_denoise_intensity": 0.2, "notch_depth_db": 5.0}
+    instrumental_updates = {"instrumental_mud_cut_hz": 60.0}
+
+    window.on_stem_analysis_finished(vocal_updates, instrumental_updates, [])
+
+    assert window._active_stem_analysis_job is None
+    assert window._vocal_panel.get_settings().vocal_denoise_intensity == 0.2
+    assert window._vocal_panel.get_settings().notch_depth_db == 5.0
+    assert window._instrumental_panel.get_settings().instrumental_mud_cut_hz == 60.0
+    assert "AI auto-tune applied" in window._status_label.text()
+
+
+def test_stem_analysis_finished_total_failure_keeps_existing_settings(qtbot, tmp_path):
+    mock_cache = MagicMock()
+    window = MainWindow(cache_manager=mock_cache)
+    qtbot.addWidget(window)
+    window._active_stem_analysis_job = MagicMock()
+
+    before = window._vocal_panel.get_settings()
+
+    window.on_stem_analysis_finished({}, {}, ["Vocal stem analysis failed: network error"])
+
+    after = window._vocal_panel.get_settings()
+    assert before == after
+    assert "AI auto-tune failed" in window._status_label.text()
+
+
+def test_edit_gemini_key_action_opens_dialog(qtbot):
+    mock_cache = MagicMock()
+    window = MainWindow(cache_manager=mock_cache)
+    qtbot.addWidget(window)
+
+    with patch("app.ui.main_window.GeminiSettingsDialog") as mock_dialog_cls:
+        mock_dialog = MagicMock()
+        mock_dialog_cls.return_value = mock_dialog
+
+        window.on_edit_gemini_key_clicked()
+
+        mock_dialog_cls.assert_called_once_with(window)
+        mock_dialog.exec.assert_called_once()
 
 
 def test_extract_stems_without_track_warns(qtbot):

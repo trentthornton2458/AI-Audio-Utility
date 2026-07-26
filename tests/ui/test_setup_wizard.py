@@ -5,11 +5,12 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PySide6.QtWidgets import QWizard, QWizardPage
+from PySide6.QtWidgets import QLineEdit, QWizard, QWizardPage
 
 from app.setup.model_downloader import ModelDownloadError, REQUIRED_MODEL_SPECS
 from app.ui.setup_wizard import (
     CompletionPage,
+    GeminiApiKeyPage,
     HardwareCheckPage,
     ModelDownloadPage,
     SetupWizard,
@@ -23,16 +24,18 @@ def test_setup_wizard_page_structure(qtbot):
     qtbot.addWidget(wizard)
 
     page_ids = wizard.pageIds()
-    assert len(page_ids) == 4
+    assert len(page_ids) == 5
     assert isinstance(wizard.welcome_page, WelcomePage)
     assert isinstance(wizard.hardware_page, HardwareCheckPage)
+    assert isinstance(wizard.gemini_api_key_page, GeminiApiKeyPage)
     assert isinstance(wizard.download_page, ModelDownloadPage)
     assert isinstance(wizard.completion_page, CompletionPage)
 
     assert wizard.page(page_ids[0]) == wizard.welcome_page
     assert wizard.page(page_ids[1]) == wizard.hardware_page
-    assert wizard.page(page_ids[2]) == wizard.download_page
-    assert wizard.page(page_ids[3]) == wizard.completion_page
+    assert wizard.page(page_ids[2]) == wizard.gemini_api_key_page
+    assert wizard.page(page_ids[3]) == wizard.download_page
+    assert wizard.page(page_ids[4]) == wizard.completion_page
 
 
 def test_hardware_check_page_gpu_detected_sufficient_ram(qtbot):
@@ -121,6 +124,63 @@ def test_hardware_check_page_cpu_fallback_sufficient_ram_pyside_warning(qtbot):
         assert page._status_text == "No GPU detected — will run on CPU (slower)"
         assert "sufficient for local CPU rendering" in page._detail_label.text()
         assert "PySide6 Plugins Diagnostic Warning" in page._detail_label.text()
+
+
+def test_gemini_api_key_page_blocks_until_key_entered(qtbot):
+    page = GeminiApiKeyPage()
+    qtbot.addWidget(page)
+
+    with patch("app.ui.setup_wizard.gemini_settings.get_gemini_api_key", return_value=None):
+        page.initializePage()
+
+    assert not page.isComplete()
+
+    page._key_edit.setText("test-api-key-123")
+    assert page.isComplete()
+
+    with patch("app.ui.setup_wizard.gemini_settings.set_gemini_api_key") as mock_set:
+        assert page.validatePage() is True
+        mock_set.assert_called_once_with("test-api-key-123")
+
+
+def test_gemini_api_key_page_empty_key_fails_validation(qtbot):
+    page = GeminiApiKeyPage()
+    qtbot.addWidget(page)
+
+    assert not page.isComplete()
+    assert page.validatePage() is False
+
+
+def test_gemini_api_key_page_loads_existing_key(qtbot):
+    page = GeminiApiKeyPage()
+    qtbot.addWidget(page)
+
+    with patch("app.ui.setup_wizard.gemini_settings.get_gemini_api_key", return_value="stored-key"):
+        page.initializePage()
+
+    assert page._key_edit.text() == "stored-key"
+
+
+def test_gemini_api_key_page_show_key_toggles_echo_mode(qtbot):
+    page = GeminiApiKeyPage()
+    qtbot.addWidget(page)
+
+    assert page._key_edit.echoMode() == QLineEdit.EchoMode.Password
+    page._show_key_cb.setChecked(True)
+    assert page._key_edit.echoMode() == QLineEdit.EchoMode.Normal
+
+
+def test_gemini_api_key_page_save_failure_blocks_validation(qtbot):
+    page = GeminiApiKeyPage()
+    qtbot.addWidget(page)
+    page._key_edit.setText("test-api-key-123")
+
+    with patch(
+        "app.ui.setup_wizard.gemini_settings.set_gemini_api_key",
+        side_effect=RuntimeError("keyring backend unavailable"),
+    ):
+        assert page.validatePage() is False
+    assert "keyring backend unavailable" in page._status_label.text()
 
 
 def test_model_download_page_progress_and_success(qtbot):

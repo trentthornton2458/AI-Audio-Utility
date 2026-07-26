@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
 from app.ui.render_history_panel import RenderHistoryPanel
+from app.ui.spectrogram_view import SpectrogramCompareWidget
 from app.ui.waveform_player import WaveformPlayerWidget
 
 logger = get_logger(__name__)
@@ -145,6 +146,10 @@ class ABCompareView(QWidget):
 
         main_layout.addLayout(players_layout)
 
+        # Spectrogram Comparison (computed post-render on the exported files)
+        self._spectrogram_view = SpectrogramCompareWidget()
+        main_layout.addWidget(self._spectrogram_view)
+
         # Render History Panel
         self._render_history_panel = RenderHistoryPanel(cache_manager=self._cache_manager)
         main_layout.addWidget(self._render_history_panel)
@@ -173,6 +178,7 @@ class ABCompareView(QWidget):
         path = Path(file_path)
         self._original_path = path
         self._original_player.load_file(path)
+        self._spectrogram_view.load_original(path)
         logger.info("ABCompareView loaded original: %s", path)
 
     def load_cleaned(self, file_path: Union[Path, str]) -> None:
@@ -180,6 +186,7 @@ class ABCompareView(QWidget):
         path = Path(file_path)
         self._cleaned_path = path
         self._cleaned_player.load_file(path)
+        self._spectrogram_view.load_cleaned(path)
         logger.info("ABCompareView loaded cleaned output: %s", path)
 
     def clear(self) -> None:
@@ -188,6 +195,7 @@ class ABCompareView(QWidget):
         self._cleaned_path = None
         self._original_player.clear()
         self._cleaned_player.clear()
+        self._spectrogram_view.clear()
 
     def play_both(self) -> None:
         """Start synchronized playback on both players."""

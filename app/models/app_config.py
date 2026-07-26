@@ -22,12 +22,34 @@ class DSPDefaults:
 
 
 @dataclass(frozen=True)
+class QAGateThresholds:
+    """Thresholds governing app.core.qa_gate's deterministic post-DSP AI-enhance QA gate.
+
+    Not user-tunable via presets -- these are safety-net defaults for the automatic per-window
+    blend-gain attenuation, not a creative control.
+    """
+
+    window_seconds: float = 3.0
+    hop_seconds: float = 1.5
+    max_enhance_gain: float = 0.35
+    spectral_flatness_delta_max: float = 0.15
+    spectral_centroid_delta_hz_max: float = 800.0
+    crest_factor_delta_db_max: float = 3.0
+    sibilance_ratio_delta_max: float = 0.20
+    silence_rms_floor: float = 1e-4
+    clipping_threshold: float = 0.999
+    hallucination_flatness_drop_max: float = 0.25
+    gemini_diagnostics_enabled: bool = True
+
+
+@dataclass(frozen=True)
 class AppConfig:
     """Immutable, process-wide application configuration."""
 
     cache_root: Path = field(default_factory=lambda: _default_cache_root())
     default_lufs_target: float = -14.0
     dsp_defaults: DSPDefaults = field(default_factory=DSPDefaults)
+    qa_gate_thresholds: QAGateThresholds = field(default_factory=QAGateThresholds)
 
 
 def _default_cache_root() -> Path:

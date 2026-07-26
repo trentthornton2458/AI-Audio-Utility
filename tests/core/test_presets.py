@@ -36,7 +36,7 @@ def test_preset_lifecycle(cache_mgr: CacheManager):
     assert "my_preset" in names
 
     loaded = load_preset("my_preset", cache_mgr)
-    assert loaded.version == "1.0"
+    assert loaded.version == "2.0"
     assert loaded.vocal_denoise_enabled is True
     assert loaded.vocal_denoise_intensity == 0.8
     assert loaded.notch_depth_db == 4.5
@@ -84,7 +84,7 @@ def test_preset_backwards_compatibility_missing_fields():
     }
     # This should parse successfully, filling in defaults
     p = Preset.from_dict(raw)
-    assert p.version == "1.0"  # Filled safe default version
+    assert p.version == "2.0"  # Filled safe default version
     assert p.vocal_denoise_intensity == 0.7  # Kept
     assert p.notch_depth_db == 4.2  # Kept
     assert p.vocal_denoise_enabled is True  # Default filled
@@ -97,7 +97,7 @@ def test_preset_boundary_and_type_validation_sanitization():
         "version": "2.0",
         "vocal_denoise_enabled": "not_a_bool",  # Invalid type, should be defaulted to True
         "vocal_denoise_intensity": 1.5,         # Out of bounds (>1.0), should be defaulted to 0.5
-        "vocal_enhance_intensity": -0.1,        # Out of bounds (<0.0), should be defaulted to 0.5
+        "vocal_enhance_intensity": -0.1,        # Out of bounds (<0.0), should be defaulted to 0.2
         "vocal_gain_db": 50.0,                  # Out of bounds (>24.0), should be defaulted to 0.0
         "instrumental_mud_cut_hz": "high",      # Invalid type, should be defaulted to 40.0
         "notch_depth_db": 2.0,                  # Out of bounds (<3.0), should be defaulted to 4.5
@@ -107,7 +107,7 @@ def test_preset_boundary_and_type_validation_sanitization():
     assert p.version == "2.0"
     assert p.vocal_denoise_enabled is True      # Default
     assert p.vocal_denoise_intensity == 0.5     # Default
-    assert p.vocal_enhance_intensity == 0.5     # Default
+    assert p.vocal_enhance_intensity == 0.2     # Default
     assert p.vocal_gain_db == 0.0               # Default
     assert p.instrumental_mud_cut_hz == 40.0    # Default
     assert p.notch_depth_db == 4.5              # Default
@@ -129,3 +129,36 @@ def test_schema_is_valid():
     assert isinstance(PRESET_SCHEMA, dict)
     assert PRESET_SCHEMA["type"] == "object"
     assert "properties" in PRESET_SCHEMA
+
+
+def test_legacy_v1_preset_with_removed_vocal_clean_intensity_loads_without_crash():
+    # A pre-reorder (schema v1.0) preset JSON still has vocal_clean_intensity, which no longer
+    # exists on Preset -- it must be dropped rather than crashing the load.
+    raw = {
+        "version": "1.0",
+        "vocal_clean_intensity": 0.8,
+        "notch_depth_db": 4.2,
+    }
+    p = Preset.from_dict(raw)
+    assert not hasattr(p, "vocal_clean_intensity")
+    assert p.notch_depth_db == 4.2
+
+
+def test_legacy_v1_preset_clamps_enhance_intensity_into_new_cap():
+    # A legacy value that was valid under the old 0.0-1.0 range (0.9) must be clamped down to
+    # the new 0.35 hard cap, not silently reset to the new default (0.2) -- it predates the cap
+    # rather than being simply invalid.
+    raw = {
+        "version": "1.0",
+        "vocal_enhance_intensity": 0.9,
+        "instrumental_enhance_intensity": 0.9,
+    }
+    p = Preset.from_dict(raw)
+    assert p.vocal_enhance_intensity == 0.35
+    assert p.instrumental_enhance_intensity == 0.35
+
+
+def test_enhance_intensity_above_cap_rejected_by_schema_validation():
+    p = Preset(vocal_enhance_intensity=0.5)
+    with pytest.raises(jsonschema.ValidationError):
+        p.to_dict()

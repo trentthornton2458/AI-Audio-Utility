@@ -11,17 +11,17 @@ PRESET_SCHEMA = {
     "title": "Preset",
     "type": "object",
     "properties": {
-        "version": { "type": "string", "default": "1.0" },
+        "version": { "type": "string", "default": "2.0" },
         "vocal_denoise_enabled": { "type": "boolean" },
         "vocal_denoise_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
         "vocal_enhance_enabled": { "type": "boolean" },
-        "vocal_enhance_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
-        "vocal_clean_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "vocal_enhance_intensity": { "type": "number", "minimum": 0.0, "maximum": 0.35 },
         "vocal_gain_db": { "type": "number", "minimum": -24.0, "maximum": 24.0 },
+        "vocal_deesser_depth_db": { "type": "number", "minimum": -24.0, "maximum": 0.0 },
         "instrumental_denoise_enabled": { "type": "boolean" },
         "instrumental_denoise_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
         "instrumental_enhance_enabled": { "type": "boolean" },
-        "instrumental_enhance_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "instrumental_enhance_intensity": { "type": "number", "minimum": 0.0, "maximum": 0.35 },
         "instrumental_mud_cut_hz": { "type": "number", "minimum": 20.0, "maximum": 120.0 },
         "instrumental_dehiss_shelf_hz": { "type": "number", "minimum": 6000.0, "maximum": 16000.0 },
         "instrumental_dehiss_gain_db": { "type": "number", "minimum": -6.0, "maximum": 0.0 },
@@ -35,8 +35,8 @@ PRESET_SCHEMA = {
         "vocal_denoise_intensity",
         "vocal_enhance_enabled",
         "vocal_enhance_intensity",
-        "vocal_clean_intensity",
         "vocal_gain_db",
+        "vocal_deesser_depth_db",
         "instrumental_denoise_enabled",
         "instrumental_denoise_intensity",
         "instrumental_enhance_enabled",
@@ -52,6 +52,41 @@ PRESET_SCHEMA = {
 }
 
 
+_LEGACY_REMOVED_FIELDS = ("vocal_clean_intensity",)
+_LEGACY_CAPPED_FIELDS = ("vocal_enhance_intensity", "instrumental_enhance_intensity")
+
+
+def _migrate_legacy_preset_dict(raw_data: dict) -> dict:
+    """Best-effort pre-pass over a possibly-legacy (schema v1.0) preset dict, run before the
+    generic validation loop below. Never raises -- malformed input passes through unchanged
+    and is handled by the type/bound fallback logic in sanitize_preset_dict.
+
+    - Drops removed fields (vocal_clean_intensity, no longer meaningful now that AI enhancement
+      always runs after DSP rather than being crossfaded against it). The main loop below only
+      ever reads keys from PRESET_SCHEMA['properties'], so stray legacy keys are already
+      silently ignored by construction; this pop is for explicitness/auditability.
+    - CLAMPS (does not reset-to-default) legacy enhance-intensity values that were valid under
+      the old 0.0-1.0 range down into the new 0.0-0.35 hard cap, preserving user intent instead
+      of silently discarding it to the new default -- this is the one place sanitization
+      deliberately clamps rather than defaults, because the value predates the cap rather than
+      being simply invalid.
+    """
+    if not isinstance(raw_data, dict):
+        return raw_data
+
+    migrated = dict(raw_data)
+    for key in _LEGACY_REMOVED_FIELDS:
+        migrated.pop(key, None)
+
+    for key in _LEGACY_CAPPED_FIELDS:
+        new_max = PRESET_SCHEMA["properties"][key]["maximum"]
+        val = migrated.get(key)
+        if isinstance(val, (int, float)) and not isinstance(val, bool) and val > new_max:
+            migrated[key] = new_max
+
+    return migrated
+
+
 def sanitize_preset_dict(raw_data: dict) -> tuple[dict, list[str]]:
     """Sanitize raw data dictionary to ensure backwards compatibility and strict schema conformance.
 
@@ -60,21 +95,23 @@ def sanitize_preset_dict(raw_data: dict) -> tuple[dict, list[str]]:
     if not isinstance(raw_data, dict):
         raise ValueError("Preset data must be a dictionary")
 
+    raw_data = _migrate_legacy_preset_dict(raw_data)
+
     sanitized = {}
     warnings = []
 
     defaults = {
-        "version": "1.0",
+        "version": "2.0",
         "vocal_denoise_enabled": True,
         "vocal_denoise_intensity": 0.5,
         "vocal_enhance_enabled": True,
-        "vocal_enhance_intensity": 0.5,
-        "vocal_clean_intensity": 1.0,
+        "vocal_enhance_intensity": 0.2,
         "vocal_gain_db": 0.0,
+        "vocal_deesser_depth_db": -6.0,
         "instrumental_denoise_enabled": True,
         "instrumental_denoise_intensity": 0.5,
         "instrumental_enhance_enabled": True,
-        "instrumental_enhance_intensity": 0.5,
+        "instrumental_enhance_intensity": 0.2,
         "instrumental_mud_cut_hz": 40.0,
         "instrumental_dehiss_shelf_hz": 10000.0,
         "instrumental_dehiss_gain_db": -3.0,
@@ -142,18 +179,18 @@ class Preset:
     and remix_master so a preset can fully reproduce a render without extra defaults.
     """
 
-    version: str = "1.0"
+    version: str = "2.0"
     vocal_denoise_enabled: bool = True
     vocal_denoise_intensity: float = 0.5
     vocal_enhance_enabled: bool = True
-    vocal_enhance_intensity: float = 0.5
-    vocal_clean_intensity: float = 1.0
+    vocal_enhance_intensity: float = 0.2
     vocal_gain_db: float = 0.0
+    vocal_deesser_depth_db: float = -6.0
 
     instrumental_denoise_enabled: bool = True
     instrumental_denoise_intensity: float = 0.5
     instrumental_enhance_enabled: bool = True
-    instrumental_enhance_intensity: float = 0.5
+    instrumental_enhance_intensity: float = 0.2
     instrumental_mud_cut_hz: float = 40.0
     instrumental_dehiss_shelf_hz: float = 10000.0
     instrumental_dehiss_gain_db: float = -3.0

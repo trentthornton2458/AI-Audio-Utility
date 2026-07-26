@@ -1,9 +1,12 @@
 """PySide6 Vocal Control Panel for Music Mastery Enhancer.
 
 Provides granular control over vocal stem cleaning and processing:
-- Neural Denoising & Enhancement toggles + intensity sliders (0-100%)
-- Vocal Clean Intensity slider (crossfading neural-only vs neural+DSP per vocal_chain.blend_vocal)
+- Neural Denoise toggle + intensity slider (0-100%, pre-DSP)
+- Neural Enhance toggle + intensity slider (0-35%, hard-capped -- the last AI stage in the
+  pipeline, blended back in via app.core.qa_gate's QA-gated capped residual blend, never a
+  plain crossfade)
 - Harshness Cut / 4kHz Notch Depth slider (-3dB to -6dB range)
+- De-Esser Depth slider (-24dB to 0dB)
 - Vocal Gain (dB) spinbox (-24.0 to +24.0 dB)
 - Preset dropdown & 'Save As...' dialog wired to app.core.presets
 - Manual Apply/Render button emitting renderRequested(Settings)
@@ -66,10 +69,12 @@ class IntensitySlider(QWidget):
         initial_value: int = 50,
         checked: bool = True,
         accent_color: str = "#6c5ce7",
+        max_value: int = 100,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self._accent_color = accent_color
+        self._max_value = max_value
         self._init_ui(title, initial_value, checked)
 
     def _init_ui(self, title: str, initial_value: int, checked: bool) -> None:
@@ -93,7 +98,7 @@ class IntensitySlider(QWidget):
         layout.addLayout(header_layout)
 
         self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setRange(0, 100)
+        self.slider.setRange(0, self._max_value)
         self.slider.setValue(initial_value)
         self.slider.setEnabled(checked)
         self.slider.setStyleSheet(make_slider_stylesheet(self._accent_color))
@@ -133,6 +138,7 @@ class VocalPanel(QWidget):
     """Control panel QWidget for configuring vocal stem cleaning, DSP parameters, and gain."""
 
     renderRequested = Signal(Settings)
+    autoTuneRequested = Signal()
 
     def __init__(
         self,
@@ -201,6 +207,15 @@ class VocalPanel(QWidget):
         preset_layout.addWidget(self._save_preset_button)
         preset_layout.addStretch()
 
+        self._auto_tune_button = QPushButton("✨ Auto-Tune with Gemini")
+        self._auto_tune_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._auto_tune_button.setStyleSheet(
+            "QPushButton { background-color: #00cec9; color: #ffffff; border: none; border-radius: 4px; padding: 6px 14px; font-size: 12px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #81ecec; }"
+        )
+        self._auto_tune_button.clicked.connect(self.autoTuneRequested.emit)
+        preset_layout.addWidget(self._auto_tune_button)
+
         main_layout.addWidget(preset_box)
 
         # Group 1: Neural Stage (Resemble-Enhance)
@@ -225,11 +240,12 @@ class VocalPanel(QWidget):
         self._denoise_slider.valueChanged.connect(self.on_denoise_intensity_changed)
         neural_layout.addWidget(self._denoise_widget)
 
-        # Enhance Row
+        # Enhance Row (hard-capped at 35% -- see app.core.qa_gate.MAX_ENHANCE_GAIN)
         self._enhance_widget = IntensitySlider(
             "Enable Harmonic Enhancement",
             initial_value=int(round(self._current_settings.vocal_enhance_intensity * 100)),
             checked=self._current_settings.vocal_enhance_enabled,
+            max_value=35,
         )
         self._enhance_cb = self._enhance_widget.checkbox
         self._enhance_slider = self._enhance_widget.slider
@@ -248,31 +264,6 @@ class VocalPanel(QWidget):
         )
         dsp_layout = QVBoxLayout(dsp_group)
         dsp_layout.setSpacing(14)
-
-        # Vocal Clean Intensity Slider (blend neural vs neural+DSP)
-        clean_row = QVBoxLayout()
-        clean_header = QHBoxLayout()
-        clean_title = QLabel("<b>Vocal Clean Intensity</b>")
-        clean_title.setStyleSheet("color: #ffffff;")
-        clean_desc = QLabel(
-            "<span style='color: #8a8d9b; font-size: 11px;'>(0% = Neural only | 100% = Full Neural + DSP Chain)</span>"
-        )
-        self._clean_val_label = QLabel(f"{int(self._current_settings.vocal_clean_intensity * 100)}%")
-        self._clean_val_label.setStyleSheet("color: #55efc4; font-weight: bold;")
-
-        clean_header.addWidget(clean_title)
-        clean_header.addWidget(clean_desc)
-        clean_header.addStretch()
-        clean_header.addWidget(self._clean_val_label)
-        clean_row.addLayout(clean_header)
-
-        self._clean_slider = QSlider(Qt.Orientation.Horizontal)
-        self._clean_slider.setRange(0, 100)
-        self._clean_slider.setValue(int(self._current_settings.vocal_clean_intensity * 100))
-        self._clean_slider.setStyleSheet(self._slider_style())
-        self._clean_slider.valueChanged.connect(self.on_clean_intensity_changed)
-        clean_row.addWidget(self._clean_slider)
-        dsp_layout.addLayout(clean_row)
 
         # Harshness Cut / 4kHz Notch Depth Slider (-3dB to -6dB)
         notch_row = QVBoxLayout()
@@ -299,6 +290,31 @@ class VocalPanel(QWidget):
         self._notch_slider.valueChanged.connect(self.on_notch_depth_changed)
         notch_row.addWidget(self._notch_slider)
         dsp_layout.addLayout(notch_row)
+
+        # De-Esser Depth Slider (-24dB to 0dB)
+        deesser_row = QVBoxLayout()
+        deesser_header = QHBoxLayout()
+        deesser_title = QLabel("<b>De-Esser (Sibilance Reduction)</b>")
+        deesser_title.setStyleSheet("color: #ffffff;")
+        deesser_desc = QLabel("<span style='color: #8a8d9b; font-size: 11px;'>(Reduces harsh 's' sounds)</span>")
+
+        deesser_val = self._current_settings.vocal_deesser_depth_db
+        self._deesser_val_label = QLabel(f"{deesser_val:.1f} dB")
+        self._deesser_val_label.setStyleSheet("color: #74b9ff; font-weight: bold;")
+
+        deesser_header.addWidget(deesser_title)
+        deesser_header.addWidget(deesser_desc)
+        deesser_header.addStretch()
+        deesser_header.addWidget(self._deesser_val_label)
+        deesser_row.addLayout(deesser_header)
+
+        self._deesser_slider = QSlider(Qt.Orientation.Horizontal)
+        self._deesser_slider.setRange(-240, 0)
+        self._deesser_slider.setValue(int(round(deesser_val * 10)))
+        self._deesser_slider.setStyleSheet(self._slider_style(accent_color="#74b9ff"))
+        self._deesser_slider.valueChanged.connect(self.on_deesser_depth_changed)
+        deesser_row.addWidget(self._deesser_slider)
+        dsp_layout.addLayout(deesser_row)
 
         # Vocal Gain Spinner (-24 to +24 dB)
         gain_row = QHBoxLayout()
@@ -351,8 +367,8 @@ class VocalPanel(QWidget):
         self._current_settings.vocal_denoise_intensity = self._denoise_slider.value() / 100.0
         self._current_settings.vocal_enhance_enabled = self._enhance_cb.isChecked()
         self._current_settings.vocal_enhance_intensity = self._enhance_slider.value() / 100.0
-        self._current_settings.vocal_clean_intensity = self._clean_slider.value() / 100.0
-        self._current_settings.notch_depth_db = self._notch_slider.value() / 10.0
+        self._current_settings.notch_depth_db = float(self._notch_slider.value()) / 10.0
+        self._current_settings.vocal_deesser_depth_db = float(self._deesser_slider.value()) / 10.0
         self._current_settings.vocal_gain_db = self._gain_spinner.value()
         return Settings.from_preset(self._current_settings.to_preset())
 
@@ -361,27 +377,35 @@ class VocalPanel(QWidget):
         preset = settings if isinstance(settings, Preset) else settings.to_preset()
         self._current_settings = Settings.from_preset(preset)
 
-        # Update UI controls without triggering unwanted state mutations
-        self._denoise_cb.setChecked(preset.vocal_denoise_enabled)
-        self._denoise_slider.setValue(int(round(preset.vocal_denoise_intensity * 100)))
-        self._denoise_slider.setEnabled(preset.vocal_denoise_enabled)
-        self._denoise_val_label.setText(f"{int(round(preset.vocal_denoise_intensity * 100))}%")
+        # Guard against on_notch_depth_changed/on_deesser_depth_changed resetting the preset
+        # combo back to "Default Preset" (and recursively reloading it) as a side effect of the
+        # setValue() calls below programmatically changing those sliders.
+        self._block_preset_signals = True
+        try:
+            # Update UI controls without triggering unwanted state mutations
+            self._denoise_cb.setChecked(preset.vocal_denoise_enabled)
+            self._denoise_slider.setValue(int(round(preset.vocal_denoise_intensity * 100)))
+            self._denoise_slider.setEnabled(preset.vocal_denoise_enabled)
+            self._denoise_val_label.setText(f"{int(round(preset.vocal_denoise_intensity * 100))}%")
 
-        self._enhance_cb.setChecked(preset.vocal_enhance_enabled)
-        self._enhance_slider.setValue(int(round(preset.vocal_enhance_intensity * 100)))
-        self._enhance_slider.setEnabled(preset.vocal_enhance_enabled)
-        self._enhance_val_label.setText(f"{int(round(preset.vocal_enhance_intensity * 100))}%")
+            self._enhance_cb.setChecked(preset.vocal_enhance_enabled)
+            self._enhance_slider.setValue(int(round(preset.vocal_enhance_intensity * 100)))
+            self._enhance_slider.setEnabled(preset.vocal_enhance_enabled)
+            self._enhance_val_label.setText(f"{int(round(preset.vocal_enhance_intensity * 100))}%")
 
-        self._clean_slider.setValue(int(round(preset.vocal_clean_intensity * 100)))
-        self._clean_val_label.setText(f"{int(round(preset.vocal_clean_intensity * 100))}%")
+            notch_val = preset.notch_depth_db
+            slider_notch = int(round(notch_val * 10))
+            slider_notch = max(NOTCH_SLIDER_MIN, min(NOTCH_SLIDER_MAX, slider_notch))
+            self._notch_slider.setValue(slider_notch)
+            self._notch_val_label.setText(f"-{notch_val:.1f} dB")
 
-        notch_val = preset.notch_depth_db
-        slider_notch = int(round(notch_val * 10))
-        slider_notch = max(NOTCH_SLIDER_MIN, min(NOTCH_SLIDER_MAX, slider_notch))
-        self._notch_slider.setValue(slider_notch)
-        self._notch_val_label.setText(f"-{notch_val:.1f} dB")
+            deesser_val = preset.vocal_deesser_depth_db
+            self._deesser_slider.setValue(int(round(deesser_val * 10)))
+            self._deesser_val_label.setText(f"{deesser_val:.1f} dB")
 
-        self._gain_spinner.setValue(preset.vocal_gain_db)
+            self._gain_spinner.setValue(preset.vocal_gain_db)
+        finally:
+            self._block_preset_signals = False
 
     # --- Preset Management ---
 
@@ -462,13 +486,18 @@ class VocalPanel(QWidget):
         self._enhance_val_label.setText(f"{value}%")
 
     @Slot(int)
-    def on_clean_intensity_changed(self, value: int) -> None:
-        self._clean_val_label.setText(f"{value}%")
+    def on_notch_depth_changed(self, value_x10: int) -> None:
+        real_val = float(value_x10) / 10.0
+        self._notch_val_label.setText(f"-{real_val:.1f} dB")
+        if not self._block_preset_signals:
+            self._preset_combo.setCurrentIndex(0)
 
     @Slot(int)
-    def on_notch_depth_changed(self, value: int) -> None:
-        depth_db = value / 10.0
-        self._notch_val_label.setText(f"-{depth_db:.1f} dB")
+    def on_deesser_depth_changed(self, value_x10: int) -> None:
+        real_val = float(value_x10) / 10.0
+        self._deesser_val_label.setText(f"{real_val:.1f} dB")
+        if not self._block_preset_signals:
+            self._preset_combo.setCurrentIndex(0)
 
     @Slot(float)
     def on_gain_changed(self, value: float) -> None:

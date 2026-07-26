@@ -39,8 +39,7 @@ def test_vocal_panel_structure_and_defaults(qtbot):
     assert settings.vocal_denoise_enabled is True
     assert settings.vocal_denoise_intensity == 0.5
     assert settings.vocal_enhance_enabled is True
-    assert settings.vocal_enhance_intensity == 0.5
-    assert settings.vocal_clean_intensity == 1.0
+    assert settings.vocal_enhance_intensity == 0.2
     assert settings.vocal_gain_db == 0.0
     assert settings.notch_depth_db == 4.5
 
@@ -55,8 +54,7 @@ def test_vocal_panel_set_and_get_settings(qtbot):
         vocal_denoise_enabled=False,
         vocal_denoise_intensity=0.2,
         vocal_enhance_enabled=True,
-        vocal_enhance_intensity=0.8,
-        vocal_clean_intensity=0.6,
+        vocal_enhance_intensity=0.3,
         vocal_gain_db=-3.5,
         notch_depth_db=5.2,
     )
@@ -67,8 +65,7 @@ def test_vocal_panel_set_and_get_settings(qtbot):
     assert updated.vocal_denoise_enabled is False
     assert abs(updated.vocal_denoise_intensity - 0.2) < 1e-2
     assert updated.vocal_enhance_enabled is True
-    assert abs(updated.vocal_enhance_intensity - 0.8) < 1e-2
-    assert abs(updated.vocal_clean_intensity - 0.6) < 1e-2
+    assert abs(updated.vocal_enhance_intensity - 0.3) < 1e-2
     assert updated.vocal_gain_db == -3.5
     assert abs(updated.notch_depth_db - 5.2) < 1e-2
 
@@ -99,9 +96,6 @@ def test_vocal_panel_slider_changes_update_labels(qtbot):
 
     panel._enhance_slider.setValue(30)
     assert panel._enhance_val_label.text() == "30%"
-
-    panel._clean_slider.setValue(40)
-    assert panel._clean_val_label.text() == "40%"
 
     panel._notch_slider.setValue(55)
     assert panel._notch_val_label.text() == "-5.5 dB"
@@ -138,8 +132,7 @@ def test_vocal_panel_sliders_do_not_auto_render(qtbot):
     panel.renderRequested.connect(on_render)
 
     panel._denoise_slider.setValue(90)
-    panel._enhance_slider.setValue(90)
-    panel._clean_slider.setValue(10)
+    panel._enhance_slider.setValue(30)
     panel._notch_slider.setValue(60)
 
     assert signal_received is False

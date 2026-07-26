@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import QSize, Qt, Signal, Slot
-from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent
+from PySide6.QtGui import QAction, QDragEnterEvent, QDragLeaveEvent, QDropEvent
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -32,13 +32,16 @@ from PySide6.QtWidgets import (
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
 from app.core.ingestion import UnsupportedAudioFormatError, load_and_normalize_track
+from app.models import gemini_settings
 from app.models.preset import Preset
 from app.models.settings import Settings
 from app.ui.ab_compare_view import ABCompareView
+from app.ui.gemini_settings_dialog import GeminiSettingsDialog
 from app.ui.instrumental_panel import InstrumentalPanel
 from app.ui.vocal_panel import VocalPanel
 from app.workers.render_job import RenderJob
 from app.workers.separation_job import SeparationJob
+from app.workers.stem_analysis_job import StemAnalysisJob
 
 logger = get_logger(__name__)
 
@@ -75,9 +78,6 @@ class FileLoadPanel(QFrame):
         self._browse_button = QPushButton("Browse Audio File...")
         self._browse_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._browse_button.setMinimumWidth(180)
-        self._browse_button.setToolTip("Open file browser to select an audio file")
-        self._browse_button.setAccessibleName("Browse Audio File")
-        self._browse_button.setAccessibleDescription("Opens a file dialog to select a Suno track in WAV or MP3 format.")
         self._browse_button.clicked.connect(self.on_browse_clicked)
         button_layout.addWidget(self._browse_button)
 
@@ -198,11 +198,6 @@ class StemSeparationPanel(QWidget):
         # Explicit Extract Stems action button
         self._extract_button = QPushButton("✂️  Extract Stems")
         self._extract_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._extract_button.setToolTip("Separate the audio track into vocal and instrumental stems")
-        self._extract_button.setAccessibleName("Extract Stems")
-        self._extract_button.setAccessibleDescription(
-            "Extracts separate vocal and instrumental tracks from the selected file using the BS-RoFormer model."
-        )
         self._extract_button.setStyleSheet(
             "QPushButton { background-color: #6c5ce7; color: white; font-weight: bold; font-size: 14px; padding: 10px 20px; border-radius: 6px; margin-top: 10px; }"
             "QPushButton:hover { background-color: #7d6dfa; }"
@@ -263,11 +258,19 @@ class MainWindow(QMainWindow):
         self._normalized_path: Optional[Path] = None
         self._active_render_job: Optional[RenderJob] = None
         self._active_separation_job: Optional[SeparationJob] = None
+        self._active_stem_analysis_job: Optional[StemAnalysisJob] = None
+        self._last_vocal_path: Optional[Path] = None
+        self._last_instrumental_path: Optional[Path] = None
 
         self._init_ui()
         self._apply_global_theme()
 
     def _init_ui(self) -> None:
+        settings_menu = self.menuBar().addMenu("&Settings")
+        gemini_key_action = QAction("Gemini API Key...", self)
+        gemini_key_action.triggered.connect(self.on_edit_gemini_key_clicked)
+        settings_menu.addAction(gemini_key_action)
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
@@ -295,9 +298,11 @@ class MainWindow(QMainWindow):
         # Real control panels with full slider/toggle controls
         self._vocal_panel = VocalPanel(cache_manager=self._cache_manager)
         self._vocal_panel.renderRequested.connect(self.on_vocal_render_requested)
+        self._vocal_panel.autoTuneRequested.connect(self.on_manual_auto_tune_requested)
 
         self._instrumental_panel = InstrumentalPanel(cache_manager=self._cache_manager)
         self._instrumental_panel.renderRequested.connect(self.on_instrumental_render_requested)
+        self._instrumental_panel.autoTuneRequested.connect(self.on_manual_auto_tune_requested)
 
         self._ab_compare_view = ABCompareView(cache_manager=self._cache_manager)
 
@@ -314,11 +319,6 @@ class MainWindow(QMainWindow):
 
         self._render_button = QPushButton("⚡  Render & Master Track")
         self._render_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._render_button.setToolTip("Start vocal/instrumental processing and master the combined output")
-        self._render_button.setAccessibleName("Render and Master Track")
-        self._render_button.setAccessibleDescription(
-            "Applies selected neural cleanup, DSP processing, and LUFS mastering to render the final audio track."
-        )
         self._render_button.setStyleSheet(
             "QPushButton { background-color: #00b894; color: white; font-weight: bold; font-size: 14px; padding: 10px 20px; border-radius: 6px; }"
             "QPushButton:hover { background-color: #00cec9; }"
@@ -345,9 +345,6 @@ class MainWindow(QMainWindow):
 
         self._cancel_button = QPushButton("Cancel Render")
         self._cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._cancel_button.setToolTip("Cancel the active render or separation task")
-        self._cancel_button.setAccessibleName("Cancel Render")
-        self._cancel_button.setAccessibleDescription("Stops and cancels the current running render or separation background job.")
         self._cancel_button.setStyleSheet("background-color: #d63031; color: white; padding: 2px 8px; border-radius: 4px;")
         self._cancel_button.setVisible(False)
         self._cancel_button.clicked.connect(self.on_cancel_render_clicked)
@@ -377,8 +374,8 @@ class MainWindow(QMainWindow):
             vocal_denoise_intensity=vocal_settings.vocal_denoise_intensity,
             vocal_enhance_enabled=vocal_settings.vocal_enhance_enabled,
             vocal_enhance_intensity=vocal_settings.vocal_enhance_intensity,
-            vocal_clean_intensity=vocal_settings.vocal_clean_intensity,
             vocal_gain_db=vocal_settings.vocal_gain_db,
+            vocal_deesser_depth_db=vocal_settings.vocal_deesser_depth_db,
             notch_depth_db=vocal_settings.notch_depth_db,
             # Instrumental settings from InstrumentalPanel
             instrumental_denoise_enabled=instrumental_settings.instrumental_denoise_enabled,
@@ -482,6 +479,11 @@ class MainWindow(QMainWindow):
         self._cancel_button.setVisible(False)
         self._render_button.setEnabled(True)
         self._stem_separation_panel.set_separated(vocal_path, instrumental_path)
+        self._render_button.setEnabled(True)
+        
+        self._last_vocal_path = vocal_path
+        self._last_instrumental_path = instrumental_path
+
         self._active_separation_job = None
 
         QMessageBox.information(
@@ -489,6 +491,79 @@ class MainWindow(QMainWindow):
             "Stems Extracted",
             f"Vocal and instrumental stems saved to:\n{vocal_path.parent}",
         )
+
+        self._start_stem_analysis(vocal_path, instrumental_path)
+
+    @Slot()
+    def on_manual_auto_tune_requested(self) -> None:
+        if not self._last_vocal_path or not self._last_instrumental_path:
+            QMessageBox.warning(self, "Auto-Tune Error", "Please extract stems before running Gemini AI Auto-Tune.")
+            return
+        
+        self._start_stem_analysis(self._last_vocal_path, self._last_instrumental_path)
+
+    def _start_stem_analysis(self, vocal_path: Path, instrumental_path: Path) -> None:
+        """Kick off the Gemini stem-analysis QA checkpoint (app.core.gemini_qa) in the
+        background right after separation, seeding the vocal/instrumental sliders with
+        track-appropriate baseline values before the user renders.
+
+        A missing API key or a failed analysis is non-fatal: it just leaves the sliders at
+        whatever they were already set to, logged and surfaced via the status bar rather than
+        a blocking dialog.
+        """
+        if self._active_stem_analysis_job is not None and self._active_stem_analysis_job.isRunning():
+            logger.warning("StemAnalysisJob is already running; skipping duplicate request")
+            return
+
+        api_key = gemini_settings.get_gemini_api_key()
+        if not api_key:
+            logger.warning("No Gemini API key configured; skipping AI stem analysis")
+            self._status_label.setText("Stems extracted. (AI auto-tune skipped: no Gemini API key configured.)")
+            return
+
+        logger.info("Starting StemAnalysisJob for %s, %s", vocal_path, instrumental_path)
+        job = StemAnalysisJob(
+            vocal_path=vocal_path,
+            instrumental_path=instrumental_path,
+            api_key=api_key,
+            parent=self,
+        )
+        job.analysisFinished.connect(self.on_stem_analysis_finished)
+
+        self._active_stem_analysis_job = job
+        self._status_label.setText("Analyzing stems with Gemini AI to suggest starting values...")
+        job.start()
+
+    @Slot(dict, dict, list)
+    def on_stem_analysis_finished(self, vocal_updates: dict, instrumental_updates: dict, errors: list) -> None:
+        self._active_stem_analysis_job = None
+
+        if vocal_updates:
+            settings = self._vocal_panel.get_settings()
+            for key, value in vocal_updates.items():
+                setattr(settings, key, value)
+            self._vocal_panel.set_settings(settings)
+
+        if instrumental_updates:
+            settings = self._instrumental_panel.get_settings()
+            for key, value in instrumental_updates.items():
+                setattr(settings, key, value)
+            self._instrumental_panel.set_settings(settings)
+
+        if errors:
+            logger.warning("Gemini stem analysis had errors: %s", errors)
+
+        if vocal_updates and instrumental_updates:
+            self._status_label.setText("AI auto-tune applied to vocal and instrumental sliders.")
+        elif vocal_updates or instrumental_updates:
+            self._status_label.setText("AI auto-tune partially applied (see log for details).")
+        else:
+            self._status_label.setText("AI auto-tune failed; using existing slider values.")
+
+    @Slot()
+    def on_edit_gemini_key_clicked(self) -> None:
+        dialog = GeminiSettingsDialog(self)
+        dialog.exec()
 
     @Slot(str)
     def on_separation_failed(self, error: str) -> None:
@@ -545,7 +620,7 @@ class MainWindow(QMainWindow):
 
         job.stageChanged.connect(self.on_render_stage_changed)
         job.progressChanged.connect(self.on_render_progress_changed)
-        job.finished.connect(self.on_render_finished)
+        job.renderFinished.connect(self.on_render_finished)
         job.failed.connect(self.on_render_failed)
         job.cancelled.connect(self.on_render_cancelled)
 

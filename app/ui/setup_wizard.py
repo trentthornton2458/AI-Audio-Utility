@@ -3,9 +3,11 @@
 Pages:
 1. WelcomePage: Introduces Music Mastery Enhancer and features.
 2. HardwareCheckPage: Checks torch.cuda.is_available() and displays GPU/CPU status.
-3. ModelDownloadPage: Downloads required neural model weights via ModelDownloader in background,
+3. GeminiApiKeyPage: Collects and saves the Gemini API key required by the pre-DSP stem
+   analysis QA checkpoint (see app.core.gemini_qa) -- the app's one network dependency.
+4. ModelDownloadPage: Downloads required neural model weights via ModelDownloader in background,
    updating per-model and overall QProgressBar widgets, with visible error state and Retry button.
-4. CompletionPage: Displays completion screen with a 'Launch App' button.
+5. CompletionPage: Displays completion screen with a 'Launch App' button.
 """
 
 from __future__ import annotations
@@ -18,9 +20,11 @@ import torch
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
@@ -29,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.cache import get_logger
+from app.models import gemini_settings
 from app.setup.model_downloader import (
     REQUIRED_MODEL_SPECS,
     ModelDownloader,
@@ -95,6 +100,7 @@ class WelcomePage(QWizardPage):
         intro_text = QLabel(
             "This setup wizard will guide you through:\n"
             "• Auto-detecting CUDA GPU hardware acceleration\n"
+            "• Connecting a Gemini API key for AI-driven parameter tuning\n"
             "• Downloading required neural model weights (BS-RoFormer & resemble-enhance)\n"
             "• Preparing your local environment"
         )
@@ -238,6 +244,85 @@ class HardwareCheckPage(QWizardPage):
             )
 
         self._detail_label.setText("\n\n".join(detail_paras))
+
+
+class GeminiApiKeyPage(QWizardPage):
+    """Wizard page collecting the Gemini API key used by the pre-DSP stem analysis QA
+    checkpoint (app.core.gemini_qa). Blocks Next/Finish until a non-empty key has been entered
+    and saved to the OS credential store via app.models.gemini_settings."""
+
+    def __init__(self, parent: Optional[QWizard] = None) -> None:
+        super().__init__(parent)
+        self.setTitle("AI Auto-Tune Setup")
+        self.setSubTitle("Connect a Gemini API key to enable AI-driven parameter tuning.")
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
+
+        intro_label = QLabel(
+            "After stem separation, Music Mastery Enhancer sends a short snippet of the "
+            "isolated vocal and instrumental stems to Google's Gemini API, which listens for "
+            "artifacts (hiss, harshness, low-end bleed) and suggests starting values for the "
+            "neural denoise/enhance and DSP sliders. This is the only step in the pipeline "
+            "that leaves your computer."
+        )
+        intro_label.setWordWrap(True)
+        layout.addWidget(intro_label)
+
+        key_row = QHBoxLayout()
+        key_label = QLabel("<b>Gemini API Key:</b>")
+        self._key_edit = QLineEdit()
+        self._key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self._key_edit.setPlaceholderText("Paste your Gemini API key here")
+        self._key_edit.textChanged.connect(self._on_text_changed)
+        key_row.addWidget(key_label)
+        key_row.addWidget(self._key_edit, 1)
+        layout.addLayout(key_row)
+
+        self._show_key_cb = QCheckBox("Show key")
+        self._show_key_cb.toggled.connect(self._on_show_toggled)
+        layout.addWidget(self._show_key_cb)
+
+        self._status_label = QLabel(
+            "Don't have a key? Create one for free at Google AI Studio, then paste it above."
+        )
+        self._status_label.setWordWrap(True)
+        self._status_label.setStyleSheet("color: #8a8d9b;")
+        layout.addWidget(self._status_label)
+
+        layout.addStretch()
+
+    def initializePage(self) -> None:
+        super().initializePage()
+        existing_key = gemini_settings.get_gemini_api_key()
+        if existing_key:
+            self._key_edit.setText(existing_key)
+
+    @Slot(bool)
+    def _on_show_toggled(self, checked: bool) -> None:
+        self._key_edit.setEchoMode(QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password)
+
+    @Slot(str)
+    def _on_text_changed(self, _text: str) -> None:
+        self.completeChanged.emit()
+
+    def isComplete(self) -> bool:
+        return bool(self._key_edit.text().strip())
+
+    def validatePage(self) -> bool:
+        api_key = self._key_edit.text().strip()
+        if not api_key:
+            return False
+        try:
+            gemini_settings.set_gemini_api_key(api_key)
+        except Exception as exc:
+            logger.error("Failed to save Gemini API key: %s", exc)
+            self._status_label.setText(f"Failed to save API key: {exc}")
+            self._status_label.setStyleSheet("color: #d84315;")
+            return False
+        return True
 
 
 class ModelDownloadPage(QWizardPage):
@@ -504,11 +589,13 @@ class SetupWizard(QWizard):
 
         self.welcome_page = WelcomePage(self)
         self.hardware_page = HardwareCheckPage(self)
+        self.gemini_api_key_page = GeminiApiKeyPage(self)
         self.download_page = ModelDownloadPage(downloader=downloader, parent=self)
         self.completion_page = CompletionPage(self)
 
         self.addPage(self.welcome_page)
         self.addPage(self.hardware_page)
+        self.addPage(self.gemini_api_key_page)
         self.addPage(self.download_page)
         self.addPage(self.completion_page)
 

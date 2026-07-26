@@ -103,12 +103,19 @@ def test_full_pipeline_end_to_end(tmp_path: Path):
     n_vocal = vocal_stem
     n_inst = inst_stem
 
-    # 4. Vocal DSP & Blend
-    preset = Preset(notch_depth_db=4.5, vocal_clean_intensity=0.8)
+    # 4. Vocal DSP & Blend (denoise -> DSP -> enhance -> QA-gated capped residual blend)
+    preset = Preset(notch_depth_db=4.5, vocal_enhance_intensity=0.3)
     dsp_vocal = stems_dir / "vocal_dsp.wav"
-    apply_vocal_dsp(n_vocal, preset.notch_depth_db, dsp_vocal)
+    apply_vocal_dsp(n_vocal, preset.notch_depth_db, preset.vocal_deesser_depth_db, dsp_vocal)
 
-    vocal_blended = blend_vocal(n_vocal, dsp_vocal, preset.vocal_clean_intensity)
+    # Stand in for a real resemble-enhance pass with a simple synthetic "enhanced" variant of
+    # the DSP output, since this lower-level test doesn't monkeypatch the neural model.
+    dsp_audio, dsp_sr = sf.read(str(dsp_vocal), always_2d=True, dtype="float64")
+    enhanced_vocal = stems_dir / "vocal_enhanced.wav"
+    sf.write(str(enhanced_vocal), dsp_audio * 0.9, dsp_sr, subtype="PCM_24")
+
+    qa_result = blend_vocal(dsp_vocal, enhanced_vocal, preset.vocal_enhance_intensity)
+    vocal_blended = qa_result.audio
 
     # 5. Instrumental DSP
     eq_params = InstrumentalEqParams(
@@ -152,16 +159,15 @@ def test_full_pipeline_via_render_job(tmp_path: Path, monkeypatch: pytest.Monkey
 
     # Setup a Preset with custom parameters
     preset = Preset(
-        vocal_clean_intensity=0.75,
         notch_depth_db=4.5,
         vocal_denoise_enabled=True,
         vocal_denoise_intensity=0.8,
         vocal_enhance_enabled=True,
-        vocal_enhance_intensity=0.7,
+        vocal_enhance_intensity=0.3,
         instrumental_denoise_enabled=True,
         instrumental_denoise_intensity=0.6,
         instrumental_enhance_enabled=True,
-        instrumental_enhance_intensity=0.5,
+        instrumental_enhance_intensity=0.3,
         vocal_gain_db=1.5,
         instrumental_gain_db=-1.0,
         lufs_target=-15.0,
@@ -186,7 +192,7 @@ def test_full_pipeline_via_render_job(tmp_path: Path, monkeypatch: pytest.Monkey
 
     job.stageChanged.connect(visited_stages.append)
     job.progressChanged.connect(progress_values.append)
-    job.finished.connect(finished_paths.append)
+    job.renderFinished.connect(finished_paths.append)
     job.failed.connect(failed_messages.append)
 
     # Run the job synchronously
@@ -230,16 +236,19 @@ def test_full_pipeline_via_render_job(tmp_path: Path, monkeypatch: pytest.Monkey
 
     # Verify the serialized preset matches
     serialized_preset = metadata["preset"]
-    assert serialized_preset["vocal_clean_intensity"] == 0.75
     assert serialized_preset["notch_depth_db"] == 4.5
     assert serialized_preset["vocal_denoise_enabled"] is True
     assert serialized_preset["vocal_denoise_intensity"] == 0.8
     assert serialized_preset["vocal_enhance_enabled"] is True
-    assert serialized_preset["vocal_enhance_intensity"] == 0.7
+    assert serialized_preset["vocal_enhance_intensity"] == 0.3
     assert serialized_preset["instrumental_denoise_enabled"] is True
     assert serialized_preset["instrumental_denoise_intensity"] == 0.6
     assert serialized_preset["instrumental_enhance_enabled"] is True
-    assert serialized_preset["instrumental_enhance_intensity"] == 0.5
+    assert serialized_preset["instrumental_enhance_intensity"] == 0.3
     assert serialized_preset["vocal_gain_db"] == 1.5
     assert serialized_preset["instrumental_gain_db"] == -1.0
     assert serialized_preset["lufs_target"] == -15.0
+
+    # QA gate metadata should be present (may be empty if no windows were flagged)
+    assert "qa_flags" in metadata
+    assert isinstance(metadata["qa_flags"], list)

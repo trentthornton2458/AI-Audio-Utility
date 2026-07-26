@@ -18,6 +18,10 @@ class PresetNotFoundError(Exception):
     """Raised when a named preset does not exist in the cache's presets folder."""
 
 
+class InvalidPresetNameError(ValueError):
+    """Raised when a preset name would resolve outside the presets folder (path traversal)."""
+
+
 def save_preset(name: str, preset: Preset, cache_manager: CacheManager) -> None:
     """Serialize preset to cache/presets/<name>.json, overwriting any existing file."""
     path = _preset_path(name, cache_manager)
@@ -53,4 +57,17 @@ def delete_preset(name: str, cache_manager: CacheManager) -> None:
 
 
 def _preset_path(name: str, cache_manager: CacheManager) -> Path:
-    return cache_manager.presets_dir / f"{name}{PRESET_FILE_SUFFIX}"
+    """Resolve a preset name to its file path, rejecting names that escape the presets folder.
+
+    Without this guard a name like "../../evil" or one containing a path separator would let
+    save/delete write or unlink files outside cache/presets. We build the candidate path and
+    confirm its resolved parent is exactly the presets folder before returning it.
+    """
+    if not name or not name.strip():
+        raise InvalidPresetNameError("Preset name must not be empty")
+
+    presets_dir = cache_manager.presets_dir.resolve()
+    candidate = (presets_dir / f"{name}{PRESET_FILE_SUFFIX}").resolve()
+    if candidate.parent != presets_dir:
+        raise InvalidPresetNameError(f"Invalid preset name (path traversal): {name!r}")
+    return candidate

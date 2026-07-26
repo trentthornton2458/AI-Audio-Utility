@@ -36,6 +36,15 @@ dependencies = [
     "ptflops",
     "rich",
     "tabulate",
+    # AI stem-analysis QA checkpoint (app/core/gemini_qa.py): sends a short snippet of each
+    # separated stem to Gemini's generateContent API to suggest baseline denoise/enhance/EQ
+    # values before the DSP chain runs. This is the one deliberate network dependency in an
+    # otherwise fully local/offline pipeline (see app/core/neural_common.py's deepspeed stub
+    # for why everything else stays local) -- required at first-run setup per ARCHITECTURE.md.
+    "google-genai",
+    # Stores the Gemini API key in the OS credential store (Windows Credential Manager /
+    # macOS Keychain / Secret Service) instead of a plaintext config file.
+    "keyring",
 ]
 
 [project.optional-dependencies]

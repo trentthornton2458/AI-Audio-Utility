@@ -60,12 +60,22 @@ def test_render_history_panel_refresh_with_renders(qtbot, temp_cache_manager: Ca
         "track_id": track_id,
         "render_file": render_wav.name,
         "preset": {
-            "vocal_clean_intensity": 0.8,
+            "vocal_enhance_intensity": 0.3,
             "notch_depth_db": 3.5,
             "lufs_target": -14.0,
             "vocal_gain_db": 1.5,
             "instrumental_gain_db": -0.5,
         },
+        "qa_flags": [
+            {
+                "stem_label": "vocal",
+                "start_seconds": 1.5,
+                "end_seconds": 4.5,
+                "reason": "hallucination_proxy",
+                "deterministic_gain": 0.0,
+                "final_gain": 0.0,
+            }
+        ],
     }
     meta_json.write_text(json.dumps(metadata), encoding="utf-8")
 
@@ -78,7 +88,8 @@ def test_render_history_panel_refresh_with_renders(qtbot, temp_cache_manager: Ca
     item = panel._list_widget.item(0)
     assert "render_20260722_120000.wav" in item.text()
     assert "2026-07-22 12:00:00" in item.text()
-    assert "Vocal Clean: 80%" in item.text()
+    assert "Vocal Enhance: 30%" in item.text()
+    assert "QA: 1 window(s) auto-attenuated (vocal: hallucination_proxy x1)" in item.text()
     assert item.data(Qt.ItemDataRole.UserRole) == render_wav
 
 

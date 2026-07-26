@@ -56,6 +56,7 @@ class InstrumentalPanel(QWidget):
 
     settingsChanged = Signal(Settings)
     renderRequested = Signal(Settings)
+    autoTuneRequested = Signal()
 
     def __init__(
         self,
@@ -141,6 +142,15 @@ class InstrumentalPanel(QWidget):
         preset_layout.addWidget(self._save_preset_button)
         preset_layout.addStretch()
 
+        self._auto_tune_button = QPushButton("✨ Auto-Tune with Gemini")
+        self._auto_tune_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._auto_tune_button.setStyleSheet(
+            "QPushButton { background-color: #00cec9; color: #ffffff; border: none; border-radius: 4px; padding: 6px 14px; font-size: 12px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #81ecec; }"
+        )
+        self._auto_tune_button.clicked.connect(self.autoTuneRequested.emit)
+        preset_layout.addWidget(self._auto_tune_button)
+
         main_layout.addWidget(preset_box)
 
         # Cleanup Container (contains Neural & EQ stages)
@@ -171,11 +181,12 @@ class InstrumentalPanel(QWidget):
         self._denoise_widget.valueChanged.connect(self._emit_settings_changed)
         neural_layout.addWidget(self._denoise_widget)
 
-        # Enhance Row
+        # Enhance Row (hard-capped at 35% -- see app.core.qa_gate.MAX_ENHANCE_GAIN)
         self._enhance_widget = IntensitySlider(
             "Enable Harmonic Enhancement",
             initial_value=int(round(self._current_settings.instrumental_enhance_intensity * 100)),
             checked=self._current_settings.instrumental_enhance_enabled,
+            max_value=35,
         )
         self._enhance_cb = self._enhance_widget.checkbox
         self._enhance_slider = self._enhance_widget.slider

@@ -201,23 +201,44 @@ class RenderHistoryPanel(QWidget):
 
             preset = data.get("preset", {})
             if preset and isinstance(preset, dict):
-                v_clean = preset.get("vocal_clean_intensity", 1.0)
+                v_enhance = preset.get("vocal_enhance_intensity", 0.0)
                 notch = preset.get("notch_depth_db", 0.0)
                 lufs = preset.get("lufs_target", -14.0)
                 v_gain = preset.get("vocal_gain_db", 0.0)
                 i_gain = preset.get("instrumental_gain_db", 0.0)
                 summary = (
-                    f"Vocal Clean: {int(v_clean * 100)}% | Notch: {notch:.1f}dB | "
+                    f"Vocal Enhance: {int(v_enhance * 100)}% | Notch: {notch:.1f}dB | "
                     f"LUFS Target: {lufs:.1f}dB | Vocal: {v_gain:+.1f}dB | Inst: {i_gain:+.1f}dB"
                 )
             else:
                 summary = "Custom Settings"
+
+            summary = f"{summary}\n{self._summarize_qa_flags(data)}"
 
             return formatted_ts, summary
 
         except Exception as exc:
             logger.warning("Error reading metadata from %s: %s", meta_path, exc)
             return fallback_time, "Metadata error"
+
+    def _summarize_qa_flags(self, data: dict) -> str:
+        """Summarize app.core.qa_gate.QAWindowFlag entries stored in a render's metadata JSON
+        (see app.workers.render_job._write_metadata) into a one-line, human-readable string."""
+        qa_flags = data.get("qa_flags")
+        if not qa_flags:
+            return "QA: no auto-attenuation"
+
+        counts: dict[tuple[str, str], int] = {}
+        for flag in qa_flags:
+            key = (flag.get("stem_label", "?"), flag.get("reason", "?"))
+            counts[key] = counts.get(key, 0) + 1
+
+        parts_by_stem: dict[str, list[str]] = {}
+        for (stem_label, reason), count in counts.items():
+            parts_by_stem.setdefault(stem_label, []).append(f"{reason} x{count}")
+
+        detail = "; ".join(f"{stem}: {', '.join(reasons)}" for stem, reasons in parts_by_stem.items())
+        return f"QA: {len(qa_flags)} window(s) auto-attenuated ({detail})"
 
     # --- Event Slots ---
 

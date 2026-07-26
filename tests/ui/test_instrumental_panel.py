@@ -39,7 +39,7 @@ def test_instrumental_panel_structure_and_defaults(qtbot):
     assert settings.instrumental_denoise_enabled is True
     assert settings.instrumental_denoise_intensity == 0.5
     assert settings.instrumental_enhance_enabled is True
-    assert settings.instrumental_enhance_intensity == 0.5
+    assert settings.instrumental_enhance_intensity == 0.2
     assert settings.instrumental_mud_cut_hz == 40.0
     assert settings.instrumental_dehiss_shelf_hz == 10000.0
     assert settings.instrumental_dehiss_gain_db == -3.0
@@ -56,7 +56,7 @@ def test_instrumental_panel_set_and_get_settings(qtbot):
         instrumental_denoise_enabled=True,
         instrumental_denoise_intensity=0.3,
         instrumental_enhance_enabled=False,
-        instrumental_enhance_intensity=0.7,
+        instrumental_enhance_intensity=0.3,
         instrumental_mud_cut_hz=60.0,
         instrumental_dehiss_shelf_hz=12000.0,
         instrumental_dehiss_gain_db=-5.0,
@@ -69,7 +69,7 @@ def test_instrumental_panel_set_and_get_settings(qtbot):
     assert updated.instrumental_denoise_enabled is True
     assert abs(updated.instrumental_denoise_intensity - 0.3) < 1e-2
     assert updated.instrumental_enhance_enabled is False
-    assert abs(updated.instrumental_enhance_intensity - 0.7) < 1e-2
+    assert abs(updated.instrumental_enhance_intensity - 0.3) < 1e-2
     assert updated.instrumental_mud_cut_hz == 60.0
     assert updated.instrumental_dehiss_shelf_hz == 12000.0
     assert abs(updated.instrumental_dehiss_gain_db - (-5.0)) < 1e-2

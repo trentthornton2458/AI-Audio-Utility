@@ -118,14 +118,14 @@ def test_get_system_ram_gb_windows_success():
 
 def test_get_system_ram_gb_linux_success():
     with patch("sys.platform", "linux"), \
-         patch("os.sysconf", side_effect=[4096, 4194304]):  # 4096 * 4194304 = 16 GB
+         patch("os.sysconf", side_effect=[4096, 4194304], create=True):  # 4096 * 4194304 = 16 GB
         assert get_system_ram_gb() == 16.0
 
 
 def test_get_system_ram_gb_proc_meminfo():
     meminfo_content = "MemTotal:       16345672 kB\n"
     with patch("sys.platform", "linux"), \
-         patch("os.sysconf", side_effect=ValueError), \
+         patch("os.sysconf", side_effect=ValueError, create=True), \
          patch("os.path.exists", return_value=True), \
          patch("builtins.open", patch_open_meminfo(meminfo_content)):
         # 16345672 kB / 1024 / 1024 = 15.58 GB

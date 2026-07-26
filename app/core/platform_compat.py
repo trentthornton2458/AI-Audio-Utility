@@ -5,8 +5,44 @@ audio-separator and resemble-enhance together on Windows with numpy>=2.
 from __future__ import annotations
 
 import contextlib
+import importlib.metadata
 import os
 import pathlib
+import sys
+
+
+def pyinstaller_metadata_shim() -> None:
+    """Patch importlib.metadata.version() so missing dist-info in frozen PyInstaller bundles
+    returns a safe placeholder ('0.0.0') instead of raising PackageNotFoundError.
+
+    PyInstaller's collect_all() bundles code/data/binaries but NOT .dist-info metadata.
+    The spec file's copy_metadata() calls cover *known* packages, but the dependency tree
+    is deep and some packages are inevitably missed. When a missing package's __init__.py
+    does ``importlib.metadata.version("pkg")`` and catches PackageNotFoundError, it falls
+    back to ``__version__ = "unknown"``. Downstream code (e.g. pandas' optional-dependency
+    checker, onnx2torch's compatibility gate) then calls
+    ``packaging.version.Version("unknown")``, which raises InvalidVersion and crashes the
+    render pipeline.
+
+    This shim is safe because:
+    - '0.0.0' is a valid PEP 440 version, so packaging.version.Version('0.0.0') succeeds.
+    - No code path in this app makes minimum-version decisions that would break at '0.0.0';
+      the packages are already installed and functional, just missing their metadata.
+    - The shim only activates inside a frozen (PyInstaller) build, never during development.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+
+    _original_version = importlib.metadata.version
+
+    def _safe_version(name: str) -> str:
+        try:
+            return _original_version(name)
+        except importlib.metadata.PackageNotFoundError:
+            return "0.0.0"
+
+    importlib.metadata.version = _safe_version  # type: ignore[assignment]
+
 
 
 @contextlib.contextmanager

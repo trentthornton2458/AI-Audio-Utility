@@ -57,7 +57,22 @@ def master(mixed_audio: np.ndarray, sample_rate: int, lufs_target: float = -14.0
     input_loudness = meter.integrated_loudness(mixed_audio)
     logger.info("Pre-master loudness: %.2f LUFS (target %.2f LUFS)", input_loudness, lufs_target)
 
-    normalized = pyln.normalize.loudness(mixed_audio, input_loudness, lufs_target)
+    if not np.isfinite(input_loudness):
+        # Near-silent or empty audio (e.g. a failed separation) yields -inf loudness; normalizing
+        # against it produces inf/NaN gain. Skip normalization and pass the mix straight to the
+        # limiter instead.
+        logger.warning(
+            "Non-finite pre-master loudness (%.2f); skipping loudness normalization", input_loudness
+        )
+        normalized = mixed_audio
+    else:
+        normalized = pyln.normalize.loudness(mixed_audio, input_loudness, lufs_target)
+
+    # Measure between normalize and limiter: normalization should land ~lufs_target here, and the
+    # downward-only limiter can then only reduce loudness. If the final post-master value comes out
+    # HIGHER than this, the discrepancy is in the limiter stage, not the normalization gain.
+    normalized_loudness = meter.integrated_loudness(normalized)
+    logger.info("Post-normalize (pre-limiter) loudness: %.2f LUFS", normalized_loudness)
 
     limiter_board = Pedalboard(
         [Limiter(threshold_db=LIMITER_CEILING_DBTP, release_ms=LIMITER_RELEASE_MS)]

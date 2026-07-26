@@ -14,13 +14,13 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import soundfile as sf
 from PySide6.QtCore import QObject, QThread, Signal
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
-from app.core import ingestion, instrumental_chain, neural_common, remix_master, separation, vocal_chain
+from app.core import ingestion, instrumental_chain, qa_gate, remix_master, separation, vocal_chain
 from app.core.instrumental_chain import InstrumentalEqParams
+from app.models import gemini_settings
 from app.models.preset import Preset
 
 logger = get_logger(__name__)
@@ -46,18 +46,22 @@ class _JobCancelled(Exception):
 class RenderJob(QThread):
     """Runs one full render of a track against a Preset on a background thread.
 
-    Neural passes (resemble-enhance) are cached per-stem by settings hash (see
-    app.core.neural_common), so re-running a job with a Preset whose neural settings are
-    unchanged from a previous render automatically skips straight to the DSP stage for that
-    stem — no special-casing is needed here beyond simply calling the same run_neural_pass
-    functions each time.
+    Each stem runs: neural denoise (pre-DSP) -> Pedalboard DSP chain -> neural enhance
+    (post-DSP, the last AI stage) -> app.core.qa_gate-gated capped residual blend of the
+    enhance output back into the DSP signal. Both the denoise and enhance passes are cached
+    independently by settings hash (see app.core.neural_common), so re-running a job with a
+    Preset whose denoise settings are unchanged skips straight to the DSP stage, and changing
+    only a DSP parameter still re-runs enhance (its cache key tracks the DSP output's content).
     """
 
     stageChanged = Signal(str)
     progressChanged = Signal(float)
-    # Shadows QThread's own no-arg `finished` signal by design (spec calls for finished(Path));
-    # QThread's automatic zero-arg completion emission still fires harmlessly alongside it.
-    finished = Signal(Path)
+    # Named distinctly (not `finished`) so it does not replace QThread's built-in no-arg
+    # finished signal: redeclaring `finished` on a QThread subclass shadows the base signal
+    # rather than overloading it, which would break the standard
+    # `thread.finished.connect(thread.deleteLater)` idiom. SeparationJob follows the same
+    # convention with `separationFinished`.
+    renderFinished = Signal(Path)
     failed = Signal(str)
     cancelled = Signal()
 
@@ -105,7 +109,7 @@ class RenderJob(QThread):
             self.failed.emit(str(exc))
         else:
             logger.info("Render job finished for %s -> %s", self._input_path, output_path)
-            self.finished.emit(output_path)
+            self.renderFinished.emit(output_path)
 
     def _cleanup_partial_files(self) -> None:
         logger.info("Cleaning up partial files...")
@@ -158,11 +162,17 @@ class RenderJob(QThread):
             if success:
                 self._sub_progress(stage_name, end_fraction)
 
-    def _neural_progress_callback_vocal(self, fraction: float) -> None:
-        self._sub_progress("Denoising Vocal", 0.6 * fraction)
+    def _denoise_progress_callback_vocal(self, fraction: float) -> None:
+        self._sub_progress("Denoising Vocal", 0.35 * fraction)
 
-    def _neural_progress_callback_instrumental(self, fraction: float) -> None:
-        self._sub_progress("Denoising Instrumental", 0.6 * fraction)
+    def _enhance_progress_callback_vocal(self, fraction: float) -> None:
+        self._sub_progress("Denoising Vocal", 0.45 + 0.40 * fraction)
+
+    def _denoise_progress_callback_instrumental(self, fraction: float) -> None:
+        self._sub_progress("Denoising Instrumental", 0.35 * fraction)
+
+    def _enhance_progress_callback_instrumental(self, fraction: float) -> None:
+        self._sub_progress("Denoising Instrumental", 0.45 + 0.40 * fraction)
 
     def _render(self) -> Path:
         import torch
@@ -195,10 +205,12 @@ class RenderJob(QThread):
         self._active_files.discard(instrumental_path)
 
         self._enter_stage("Denoising Vocal")
-        vocal_audio, vocal_samplerate = self._process_vocal(vocal_stem_path, preset, cache_manager, track_id)
+        vocal_audio, vocal_samplerate, vocal_qa_flags = self._process_vocal(
+            vocal_stem_path, preset, cache_manager, track_id
+        )
 
         self._enter_stage("Denoising Instrumental")
-        instrumental_audio, instrumental_samplerate = self._process_instrumental(
+        instrumental_audio, instrumental_samplerate, instrumental_qa_flags = self._process_instrumental(
             instrumental_stem_path, preset, cache_manager, track_id
         )
 
@@ -226,18 +238,21 @@ class RenderJob(QThread):
         self._active_files.add(json_path)
 
         exported_path = remix_master.export_wav(mastered, sample_rate, output_path)
-        self._write_metadata(exported_path, track_id)
+        self._write_metadata(exported_path, track_id, vocal_qa_flags + instrumental_qa_flags)
 
         self._active_files.clear()
         return exported_path
 
-    def _write_metadata(self, render_path: Path, track_id: str) -> None:
+    def _write_metadata(
+        self, render_path: Path, track_id: str, qa_flags: list[qa_gate.QAWindowFlag]
+    ) -> None:
         try:
             metadata = {
                 "timestamp": datetime.now().isoformat(),
                 "track_id": track_id,
                 "render_file": render_path.name,
                 "preset": asdict(self._preset),
+                "qa_flags": [asdict(flag) for flag in qa_flags],
             }
             json_path = render_path.with_suffix(".json")
             with open(json_path, "w", encoding="utf-8") as f:
@@ -252,48 +267,55 @@ class RenderJob(QThread):
         preset: Preset,
         cache_manager: CacheManager,
         track_id: str,
-    ) -> tuple[np.ndarray, int]:
+    ) -> tuple[np.ndarray, int, list[qa_gate.QAWindowFlag]]:
         import torch
-        settings_hash = neural_common._hash_settings(
-            preset.vocal_denoise_enabled,
-            preset.vocal_denoise_intensity,
-            preset.vocal_enhance_enabled,
-            preset.vocal_enhance_intensity,
-        )
-        neural_vocal_path = cache_manager.stems_dir(track_id) / f"{vocal_chain.NEURAL_FILENAME_PREFIX}{settings_hash}.wav"
 
-        self._active_files.add(neural_vocal_path)
-
-        duration = 3.0 if torch.cuda.is_available() else 25.0
-        with self._smooth_progress("Denoising Vocal", 0.0, 0.6, duration):
+        duration = 2.0 if torch.cuda.is_available() else 15.0
+        with self._smooth_progress("Denoising Vocal", 0.0, 0.35, duration):
             try:
-                neural_vocal_path = vocal_chain.run_neural_pass(
+                denoised_vocal_path = vocal_chain.run_denoise_pass(
                     vocal_stem_path,
                     preset.vocal_denoise_enabled,
                     preset.vocal_denoise_intensity,
-                    preset.vocal_enhance_enabled,
-                    preset.vocal_enhance_intensity,
                     cache_manager,
-                    progress_callback=self._neural_progress_callback_vocal,
+                    progress_callback=self._denoise_progress_callback_vocal,
                     is_cancelled=self.isInterruptionRequested,
                 )
             except InterruptedError:
                 raise _JobCancelled()
-
-        self._active_files.discard(neural_vocal_path)
         self._checkpoint()
 
         dsp_vocal_path = cache_manager.stems_dir(track_id) / VOCAL_DSP_FILENAME
         self._active_files.add(dsp_vocal_path)
-        vocal_chain.apply_dsp_chain(neural_vocal_path, preset.notch_depth_db, dsp_vocal_path)
+        vocal_chain.apply_dsp_chain(
+            denoised_vocal_path, preset.notch_depth_db, preset.vocal_deesser_depth_db, dsp_vocal_path
+        )
         self._active_files.discard(dsp_vocal_path)
-
-        self._sub_progress("Denoising Vocal", 0.9)
+        self._sub_progress("Denoising Vocal", 0.45)
         self._checkpoint()
 
-        vocal_audio = vocal_chain.blend_vocal(neural_vocal_path, dsp_vocal_path, preset.vocal_clean_intensity)
-        samplerate = sf.info(str(dsp_vocal_path)).samplerate
-        return vocal_audio, samplerate
+        duration = 2.0 if torch.cuda.is_available() else 15.0
+        with self._smooth_progress("Denoising Vocal", 0.45, 0.85, duration):
+            try:
+                enhanced_vocal_path = vocal_chain.run_enhance_pass(
+                    dsp_vocal_path,
+                    preset.vocal_enhance_enabled,
+                    cache_manager,
+                    progress_callback=self._enhance_progress_callback_vocal,
+                    is_cancelled=self.isInterruptionRequested,
+                )
+            except InterruptedError:
+                raise _JobCancelled()
+        self._checkpoint()
+
+        gemini_api_key = gemini_settings.get_gemini_api_key()
+        qa_result = vocal_chain.blend_vocal(
+            dsp_vocal_path, enhanced_vocal_path, preset.vocal_enhance_intensity, gemini_api_key=gemini_api_key
+        )
+        self._sub_progress("Denoising Vocal", 1.0)
+        self._checkpoint()
+
+        return qa_result.audio, qa_result.samplerate, qa_result.qa_flags
 
     def _process_instrumental(
         self,
@@ -301,35 +323,22 @@ class RenderJob(QThread):
         preset: Preset,
         cache_manager: CacheManager,
         track_id: str,
-    ) -> tuple[np.ndarray, int]:
+    ) -> tuple[np.ndarray, int, list[qa_gate.QAWindowFlag]]:
         import torch
-        settings_hash = neural_common._hash_settings(
-            preset.instrumental_denoise_enabled,
-            preset.instrumental_denoise_intensity,
-            preset.instrumental_enhance_enabled,
-            preset.instrumental_enhance_intensity,
-        )
-        neural_instrumental_path = cache_manager.stems_dir(track_id) / f"{instrumental_chain.NEURAL_FILENAME_PREFIX}{settings_hash}.wav"
 
-        self._active_files.add(neural_instrumental_path)
-
-        duration = 3.0 if torch.cuda.is_available() else 25.0
-        with self._smooth_progress("Denoising Instrumental", 0.0, 0.6, duration):
+        duration = 2.0 if torch.cuda.is_available() else 15.0
+        with self._smooth_progress("Denoising Instrumental", 0.0, 0.35, duration):
             try:
-                neural_instrumental_path = instrumental_chain.run_neural_pass(
+                denoised_instrumental_path = instrumental_chain.run_denoise_pass(
                     instrumental_stem_path,
                     preset.instrumental_denoise_enabled,
                     preset.instrumental_denoise_intensity,
-                    preset.instrumental_enhance_enabled,
-                    preset.instrumental_enhance_intensity,
                     cache_manager,
-                    progress_callback=self._neural_progress_callback_instrumental,
+                    progress_callback=self._denoise_progress_callback_instrumental,
                     is_cancelled=self.isInterruptionRequested,
                 )
             except InterruptedError:
                 raise _JobCancelled()
-
-        self._active_files.discard(neural_instrumental_path)
         self._checkpoint()
 
         eq_params = InstrumentalEqParams(
@@ -339,14 +348,36 @@ class RenderJob(QThread):
         )
         dsp_instrumental_path = cache_manager.stems_dir(track_id) / INSTRUMENTAL_DSP_FILENAME
         self._active_files.add(dsp_instrumental_path)
-        instrumental_chain.apply_dsp_chain(neural_instrumental_path, eq_params, dsp_instrumental_path)
+        instrumental_chain.apply_dsp_chain(denoised_instrumental_path, eq_params, dsp_instrumental_path)
         self._active_files.discard(dsp_instrumental_path)
-
-        self._sub_progress("Denoising Instrumental", 0.9)
+        self._sub_progress("Denoising Instrumental", 0.45)
         self._checkpoint()
 
-        instrumental_audio, samplerate = sf.read(str(dsp_instrumental_path), always_2d=True, dtype="float64")
-        return instrumental_audio, samplerate
+        duration = 2.0 if torch.cuda.is_available() else 15.0
+        with self._smooth_progress("Denoising Instrumental", 0.45, 0.85, duration):
+            try:
+                enhanced_instrumental_path = instrumental_chain.run_enhance_pass(
+                    dsp_instrumental_path,
+                    preset.instrumental_enhance_enabled,
+                    cache_manager,
+                    progress_callback=self._enhance_progress_callback_instrumental,
+                    is_cancelled=self.isInterruptionRequested,
+                )
+            except InterruptedError:
+                raise _JobCancelled()
+        self._checkpoint()
+
+        gemini_api_key = gemini_settings.get_gemini_api_key()
+        qa_result = instrumental_chain.blend_instrumental(
+            dsp_instrumental_path,
+            enhanced_instrumental_path,
+            preset.instrumental_enhance_intensity,
+            gemini_api_key=gemini_api_key,
+        )
+        self._sub_progress("Denoising Instrumental", 1.0)
+        self._checkpoint()
+
+        return qa_result.audio, qa_result.samplerate, qa_result.qa_flags
 
     def _resolve_output_path(self, track_id: str, cache_manager: CacheManager) -> Path:
         if self._output_path is not None:
