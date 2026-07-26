@@ -7,12 +7,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PySide6.QtWidgets import QLineEdit, QWizard, QWizardPage
 
-from app.setup.model_downloader import ModelDownloadError, REQUIRED_MODEL_SPECS
+from app.setup.model_downloader import ModelDownloadError, RubberbandDownloadError, REQUIRED_MODEL_SPECS
 from app.ui.setup_wizard import (
     CompletionPage,
     GeminiApiKeyPage,
     HardwareCheckPage,
     ModelDownloadPage,
+    RubberbandDownloadPage,
+    RubberbandDownloadWorker,
     SetupWizard,
     WelcomePage,
 )
@@ -24,18 +26,20 @@ def test_setup_wizard_page_structure(qtbot):
     qtbot.addWidget(wizard)
 
     page_ids = wizard.pageIds()
-    assert len(page_ids) == 5
+    assert len(page_ids) == 6
     assert isinstance(wizard.welcome_page, WelcomePage)
     assert isinstance(wizard.hardware_page, HardwareCheckPage)
     assert isinstance(wizard.gemini_api_key_page, GeminiApiKeyPage)
     assert isinstance(wizard.download_page, ModelDownloadPage)
+    assert isinstance(wizard.rubberband_download_page, RubberbandDownloadPage)
     assert isinstance(wizard.completion_page, CompletionPage)
 
     assert wizard.page(page_ids[0]) == wizard.welcome_page
     assert wizard.page(page_ids[1]) == wizard.hardware_page
     assert wizard.page(page_ids[2]) == wizard.gemini_api_key_page
     assert wizard.page(page_ids[3]) == wizard.download_page
-    assert wizard.page(page_ids[4]) == wizard.completion_page
+    assert wizard.page(page_ids[4]) == wizard.rubberband_download_page
+    assert wizard.page(page_ids[5]) == wizard.completion_page
 
 
 def test_hardware_check_page_gpu_detected_sufficient_ram(qtbot):
@@ -255,3 +259,69 @@ def test_completion_page_launch_button(qtbot):
     with patch.object(wizard, "accept") as mock_accept:
         page.on_launch_clicked()
         mock_accept.assert_called_once()
+
+
+def test_rubberband_download_page_progress_and_success(qtbot):
+    page = RubberbandDownloadPage()
+    qtbot.addWidget(page)
+
+    assert not page.isComplete()
+
+    # Simulate progress updates
+    page.on_download_progress("Rubberband CLI", 0.5)
+    assert page._progress_bar.value() == 50
+    assert page._overall_progress_bar.value() == 50
+
+    page.on_download_progress("Rubberband CLI", 1.0)
+    assert page._progress_bar.value() == 100
+    assert page._overall_progress_bar.value() == 100
+
+    # Simulate download finished
+    page.on_download_finished()
+    assert page.isComplete()
+    assert page._overall_progress_bar.value() == 100
+    assert page._error_frame.isHidden()
+    assert "successfully" in page._status_label.text()
+
+
+def test_rubberband_download_page_failure_and_retry(qtbot):
+    page = RubberbandDownloadPage()
+    qtbot.addWidget(page)
+
+    with patch.object(page, "on_start_download") as mock_start:
+        page.on_download_failed("Checksum mismatch for rubberband.exe", retryable=True)
+
+        assert not page.isComplete()
+        assert not page._error_frame.isHidden()
+        assert "Checksum mismatch for rubberband.exe" in page._error_label.text()
+        assert not page._retry_button.isHidden()
+
+        page.on_retry_clicked()
+        mock_start.assert_called_once()
+
+
+def test_rubberband_download_page_skip(qtbot):
+    page = RubberbandDownloadPage()
+    qtbot.addWidget(page)
+
+    page.on_skip_clicked()
+    assert page.isComplete()
+    assert page._progress_bar.value() == 100
+    assert page._overall_progress_bar.value() == 100
+    assert "skipped" in page._status_label.text()
+    assert not page._skip_button.isEnabled()
+
+
+def test_rubberband_download_worker(qtbot):
+    mock_cache = MagicMock()
+
+    with patch("app.ui.setup_wizard.download_rubberband_binary") as mock_dl:
+        worker = RubberbandDownloadWorker(cache_manager=mock_cache)
+        worker.run()
+        mock_dl.assert_called_once()
+        assert mock_dl.call_args.kwargs["cache_manager"] == mock_cache
+
+        # Test cancellation state
+        worker.cancel()
+        assert worker.is_cancelled() is True
+

@@ -7,7 +7,9 @@ Pages:
    analysis QA checkpoint (see app.core.gemini_qa) -- the app's one network dependency.
 4. ModelDownloadPage: Downloads required neural model weights via ModelDownloader in background,
    updating per-model and overall QProgressBar widgets, with visible error state and Retry button.
-5. CompletionPage: Displays completion screen with a 'Launch App' button.
+5. RubberbandDownloadPage: Downloads the Rubberband CLI binary for pitch & time stretching,
+   with progress bar, cancel support, and error/retry/skip handling.
+6. CompletionPage: Displays completion screen with a 'Launch App' button.
 """
 
 from __future__ import annotations
@@ -33,11 +35,16 @@ from PySide6.QtWidgets import (
 )
 
 from app.cache import get_logger
+from app.cache.cache_manager import CacheManager
 from app.models import gemini_settings
 from app.setup.model_downloader import (
     REQUIRED_MODEL_SPECS,
+    RUBBERBAND_BIN_FILENAME,
     ModelDownloader,
     ModelDownloadError,
+    RubberbandDownloadError,
+    download_rubberband_binary,
+    get_rubberband_binary_path,
 )
 from app.setup.installer import run_diagnostics, get_system_ram_gb, check_cuda_dll, check_pyside6_plugins
 
@@ -102,6 +109,7 @@ class WelcomePage(QWizardPage):
             "• Auto-detecting CUDA GPU hardware acceleration\n"
             "• Connecting a Gemini API key for AI-driven parameter tuning\n"
             "• Downloading required neural model weights (BS-RoFormer & resemble-enhance)\n"
+            "• Downloading Rubberband CLI binary for pitch & time stretching\n"
             "• Preparing your local environment"
         )
         intro_text.setWordWrap(True)
@@ -540,7 +548,8 @@ class CompletionPage(QWizardPage):
 
         summary_label = QLabel(
             "• Hardware check completed\n"
-            "• Neural model weights downloaded and verified\n\n"
+            "• Neural model weights downloaded and verified\n"
+            "• Rubberband CLI binary downloaded and verified\n\n"
             "Click <b>Launch App</b> below to begin enhancing Suno audio tracks."
         )
         summary_label.setWordWrap(True)
@@ -574,12 +583,234 @@ class CompletionPage(QWizardPage):
             self.wizard().accept()
 
 
+class RubberbandDownloadWorker(QThread):
+    """Background thread for non-blocking Rubberband CLI binary download execution."""
+
+    progress = Signal(str, float)  # name, fraction [0.0, 1.0]
+    finished = Signal()
+    failed = Signal(str, bool)  # error_reason, retryable
+
+    def __init__(
+        self,
+        cache_manager: Optional[CacheManager] = None,
+        parent: Optional[QObject] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._cache_manager = cache_manager
+        self._is_cancelled: bool = False
+
+    def cancel(self) -> None:
+        """Mark worker as cancelled so ongoing download aborts."""
+        self._is_cancelled = True
+
+    def is_cancelled(self) -> bool:
+        """Callback for download_rubberband_binary to check cancellation status."""
+        return self._is_cancelled
+
+    def run(self) -> None:
+        def progress_cb(name: str, fraction: float) -> None:
+            self.progress.emit(name, fraction)
+
+        try:
+            logger.info("Starting background download of Rubberband CLI binary")
+            download_rubberband_binary(
+                cache_manager=self._cache_manager,
+                progress_callback=progress_cb,
+                is_cancelled=self.is_cancelled,
+            )
+        except RubberbandDownloadError as exc:
+            logger.warning("Rubberband download failed: %s (retryable=%s)", exc.reason, exc.retryable)
+            self.failed.emit(exc.reason, exc.retryable)
+        except Exception as exc:
+            logger.exception("Unexpected error during Rubberband binary download: %s", exc)
+            self.failed.emit(str(exc), True)
+        else:
+            logger.info("Rubberband binary download completed successfully")
+            self.finished.emit()
+
+
+class RubberbandDownloadPage(QWizardPage):
+    """Wizard page executing Rubberband CLI binary download with progress bar and retry support."""
+
+    def __init__(
+        self,
+        cache_manager: Optional[CacheManager] = None,
+        parent: Optional[QWizard] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setTitle("Rubberband CLI Download")
+        self.setSubTitle("Downloading Rubberband CLI binary for pitch & time stretching...")
+
+        self._cache_manager = cache_manager
+        self._worker: Optional[RubberbandDownloadWorker] = None
+        self._is_complete: bool = False
+
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        self._status_label = QLabel("Preparing to download Rubberband CLI binary...")
+        self._status_label.setWordWrap(True)
+        layout.addWidget(self._status_label)
+
+        # Download progress section
+        item_frame = QFrame()
+        item_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        item_layout = QVBoxLayout(item_frame)
+        item_layout.setSpacing(10)
+
+        lbl = QLabel(f"<b>Rubberband CLI</b> ({RUBBERBAND_BIN_FILENAME})")
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setRange(0, 100)
+        self._progress_bar.setValue(0)
+        item_layout.addWidget(lbl)
+        item_layout.addWidget(self._progress_bar)
+
+        layout.addWidget(item_frame)
+
+        # Overall progress bar
+        overall_label = QLabel("<b>Overall Progress:</b>")
+        self._overall_progress_bar = QProgressBar()
+        self._overall_progress_bar.setRange(0, 100)
+        self._overall_progress_bar.setValue(0)
+
+        layout.addWidget(overall_label)
+        layout.addWidget(self._overall_progress_bar)
+
+        # Visible error state container
+        self._error_frame = QFrame()
+        self._error_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        self._error_frame.setStyleSheet("background-color: #ffebee; border: 1px solid #ef5350;")
+        error_layout = QVBoxLayout(self._error_frame)
+
+        self._error_label = QLabel()
+        self._error_label.setWordWrap(True)
+        self._error_label.setStyleSheet("color: #c62828; font-weight: bold;")
+        error_layout.addWidget(self._error_label)
+
+        self._retry_button = QPushButton("Retry Download")
+        self._retry_button.clicked.connect(self.on_retry_clicked)
+        error_layout.addWidget(self._retry_button)
+
+        self._error_frame.setVisible(False)
+        layout.addWidget(self._error_frame)
+
+        # Skip button container
+        skip_layout = QHBoxLayout()
+        skip_layout.addStretch()
+        self._skip_button = QPushButton("Skip Download")
+        self._skip_button.clicked.connect(self.on_skip_clicked)
+        skip_layout.addWidget(self._skip_button)
+        layout.addLayout(skip_layout)
+
+        layout.addStretch()
+
+    def isComplete(self) -> bool:
+        """Wizard page completion status controlling Next/Finish navigation."""
+        return self._is_complete
+
+    def initializePage(self) -> None:
+        """Automatically trigger download when page becomes active if not complete."""
+        super().initializePage()
+        if not self._is_complete:
+            self.on_start_download()
+
+    @Slot()
+    def on_start_download(self) -> None:
+        """Slot to kick off the background Rubberband download worker."""
+        self._error_frame.setVisible(False)
+        self._status_label.setText("Downloading Rubberband CLI binary...")
+        self._status_label.setStyleSheet("")
+
+        self._progress_bar.setValue(0)
+        self._overall_progress_bar.setValue(0)
+
+        self._is_complete = False
+        self.completeChanged.emit()
+
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self._worker.quit()
+            self._worker.wait()
+
+        self._worker = RubberbandDownloadWorker(cache_manager=self._cache_manager, parent=self)
+        self._worker.progress.connect(self.on_download_progress)
+        self._worker.finished.connect(self.on_download_finished)
+        self._worker.failed.connect(self.on_download_failed)
+        self._worker.start()
+
+    @Slot(str, float)
+    def on_download_progress(self, _name: str, fraction: float) -> None:
+        """Slot handling progress updates for Rubberband CLI binary download."""
+        clamped_fraction = max(0.0, min(1.0, fraction))
+        percent = int(clamped_fraction * 100)
+        self._progress_bar.setValue(percent)
+        self._overall_progress_bar.setValue(percent)
+
+    @Slot()
+    def on_download_finished(self) -> None:
+        """Slot handling successful completion of Rubberband binary download."""
+        self._progress_bar.setValue(100)
+        self._overall_progress_bar.setValue(100)
+
+        self._status_label.setText("Rubberband CLI binary downloaded and verified successfully!")
+        self._status_label.setStyleSheet("color: #2e7d32; font-weight: bold;")
+        self._error_frame.setVisible(False)
+
+        self._is_complete = True
+        self.completeChanged.emit()
+        logger.info("RubberbandDownloadPage: Download complete, page marked complete.")
+
+    @Slot(str, bool)
+    def on_download_failed(self, reason: str, retryable: bool) -> None:
+        """Slot handling download failures and presenting the error state and Retry button."""
+        self._status_label.setText("Rubberband download failed. Please review error below.")
+        self._status_label.setStyleSheet("color: #c62828;")
+
+        self._error_label.setText(f"Download Error: {reason}")
+        self._retry_button.setVisible(retryable)
+        self._error_frame.setVisible(True)
+
+        self._is_complete = False
+        self.completeChanged.emit()
+        logger.warning("RubberbandDownloadPage: Download failed (%s), retryable=%s", reason, retryable)
+
+    @Slot()
+    def on_retry_clicked(self) -> None:
+        """Slot handling click on Retry button."""
+        logger.info("RubberbandDownloadPage: Retry clicked by user.")
+        self.on_start_download()
+
+    @Slot()
+    def on_skip_clicked(self) -> None:
+        """Slot handling click on Skip Download button."""
+        logger.info("RubberbandDownloadPage: Skip clicked by user.")
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self._worker.quit()
+            self._worker.wait()
+
+        self._progress_bar.setValue(100)
+        self._overall_progress_bar.setValue(100)
+
+        self._status_label.setText("Rubberband CLI download skipped. Binary can be downloaded on demand later.")
+        self._status_label.setStyleSheet("color: #f57f17; font-weight: bold;")
+        self._error_frame.setVisible(False)
+        self._skip_button.setEnabled(False)
+
+        self._is_complete = True
+        self.completeChanged.emit()
+
+
 class SetupWizard(QWizard):
     """PySide6 QWizard for first-run setup flow."""
 
     def __init__(
         self,
         downloader: Optional[ModelDownloader] = None,
+        cache_manager: Optional[CacheManager] = None,
         parent: Optional[QObject] = None,
     ) -> None:
         super().__init__(parent)
@@ -591,12 +822,14 @@ class SetupWizard(QWizard):
         self.hardware_page = HardwareCheckPage(self)
         self.gemini_api_key_page = GeminiApiKeyPage(self)
         self.download_page = ModelDownloadPage(downloader=downloader, parent=self)
+        self.rubberband_download_page = RubberbandDownloadPage(cache_manager=cache_manager, parent=self)
         self.completion_page = CompletionPage(self)
 
         self.addPage(self.welcome_page)
         self.addPage(self.hardware_page)
         self.addPage(self.gemini_api_key_page)
         self.addPage(self.download_page)
+        self.addPage(self.rubberband_download_page)
         self.addPage(self.completion_page)
 
         self.currentIdChanged.connect(self.on_page_changed)

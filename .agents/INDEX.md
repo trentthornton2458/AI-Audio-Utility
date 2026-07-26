@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** Music Enhancer
-> **Last Updated:** 2026-07-26T03:33:12.661Z
+> **Last Updated:** 2026-07-26T03:37:59.211Z
 
 ---
 
@@ -115,8 +115,8 @@ None specified.
 ---
 
 ## 4. Execution Task Sequence (14 tasks)
-- [/] **#1: Add rubberband binary to model_downloader.py** [claude] 
-- [ ] **#2: Wire rubberband download into setup_wizard.py UI** [antigravity] 
+- [x] **#1: Add rubberband binary to model_downloader.py** [claude] (Commit: 99d47ac)
+- [/] **#2: Wire rubberband download into setup_wizard.py UI** [antigravity] 
 - [ ] **#3: Implement pitch-drift humanizer function** [claude] 
 - [ ] **#4: Implement automatic breath/noise blend-back** [claude] 
 - [ ] **#5: Insert Humanizer stage into vocal_chain.py pipeline** [claude] 
