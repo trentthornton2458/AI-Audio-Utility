@@ -1,6 +1,7 @@
 """Humanizer stage: pyrubberband-driven micro-pitch drift that breaks Suno's robotic
 micro-pitch locking by modulating pitch continuously over time with a low-frequency
-oscillator, rather than applying one static pitch shift."""
+oscillator, rather than applying one static pitch shift; plus an automatic breath/friction
+blend-back that restores detail BS-RoFormer's stem separation strips out of the vocal."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import os
 
 import numpy as np
 import pyrubberband as pyrb
+from pedalboard import HighpassFilter, Pedalboard
 
 from app.cache import get_logger
 from app.setup import model_downloader
@@ -19,6 +21,17 @@ DRIFT_DEPTH_MIN_CENTS = 3.0
 DRIFT_DEPTH_MAX_CENTS = 5.0
 DRIFT_RATE_MIN_HZ = 4.0
 DRIFT_RATE_MAX_HZ = 7.0
+
+# Fixed (non-user-configurable) mix level for blending the stem-separation residual back into
+# the processed vocal, per Counsel's spec: kept conservative and out of the user's hands so a
+# loud residual (bleed/artifacts, not just quiet breath) can never noticeably raise the noise
+# floor or push an already-normalized vocal into clipping.
+BREATH_BLEND_GAIN_DB = -18.0
+
+# Breath/friction detail (sibilance, airiness) lives above ~2kHz; high-passing the residual
+# before blending keeps low-frequency separation leakage (instrumental bleed/rumble) out of
+# the vocal instead of restoring it alongside the breath detail.
+BREATH_BLEND_HPF_HZ = 2000.0
 
 # Windowed/overlap-add processing: each window is pitch-shifted by the LFO's instantaneous
 # value at its center, then cross-faded into neighboring windows via a periodic Hann taper.
@@ -89,6 +102,43 @@ def apply_pitch_drift(audio: np.ndarray, sample_rate: int, intensity: float) -> 
     if mono_input:
         result = result[:, 0]
     return result.astype(audio.dtype)
+
+
+def apply_breath_blend(processed_vocal: np.ndarray, residual_signal: np.ndarray, sample_rate: int) -> np.ndarray:
+    """Blend a fixed, automatic amount of the stem-separation residual back into `processed_vocal`
+    to restore breath/friction detail BS-RoFormer's isolation strips out.
+
+    `residual_signal` is the leftover (original - vocal - instrumental) signal cached by
+    app.core.separation.separate_stems alongside the vocal/instrumental stems. It is high-passed
+    at BREATH_BLEND_HPF_HZ (to isolate breath/friction content from low-frequency separation
+    leakage) and mixed in at a fixed BREATH_BLEND_GAIN_DB -- not a user-facing intensity, per
+    Counsel's spec, so the UI stays simple.
+
+    Both arrays are frames-first: shape (num_samples,) for mono or (num_samples, num_channels)
+    for multichannel, matching soundfile's always_2d convention used elsewhere in this codebase.
+    Mismatched lengths are aligned by truncating to the shorter of the two.
+    """
+    length = min(processed_vocal.shape[0], residual_signal.shape[0])
+    if length == 0:
+        return np.array(processed_vocal, copy=True)
+
+    vocal = np.asarray(processed_vocal, dtype=np.float64)[:length]
+    residual = np.asarray(residual_signal, dtype=np.float64)[:length]
+
+    mono_residual = residual.ndim == 1
+    channels_first = (residual[np.newaxis, :] if mono_residual else residual.T).astype(np.float32)
+
+    hpf_board = Pedalboard([HighpassFilter(cutoff_frequency_hz=BREATH_BLEND_HPF_HZ)])
+    filtered = hpf_board(channels_first, sample_rate)
+    filtered_residual = (filtered[0] if mono_residual else filtered.T).astype(np.float64)
+
+    gain = _db_to_linear(BREATH_BLEND_GAIN_DB)
+    blended = vocal + gain * filtered_residual
+    return blended.astype(processed_vocal.dtype)
+
+
+def _db_to_linear(db: float) -> float:
+    return 10.0 ** (db / 20.0)
 
 
 def _configure_rubberband_binary() -> None:

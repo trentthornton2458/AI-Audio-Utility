@@ -149,3 +149,87 @@ def test_stereo_channels_share_a_single_lfo_curve():
     result = humanizer.apply_pitch_drift(audio, sample_rate, 1.0)
 
     assert np.allclose(result[:, 0], result[:, 1])
+
+
+def _hf_energy(audio: np.ndarray, sample_rate: int, cutoff_hz: float = 4000.0) -> float:
+    """Sum of squared magnitude spectrum above cutoff_hz, used to measure high-frequency
+    (breath/friction) energy content of a signal or signal segment."""
+    spectrum = np.fft.rfft(audio)
+    freqs = np.fft.rfftfreq(len(audio), d=1.0 / sample_rate)
+    mask = freqs >= cutoff_hz
+    return float(np.sum(np.abs(spectrum[mask]) ** 2))
+
+
+def _make_vocal_with_breath_gap(sample_rate: int, duration_s: float) -> tuple[np.ndarray, slice]:
+    """A low-frequency "sung" tone with a silent gap in the middle, simulating a breath pause
+    where BS-RoFormer would have stripped out breath/friction detail entirely."""
+    num_samples = int(duration_s * sample_rate)
+    t = np.arange(num_samples) / sample_rate
+    tone = 0.4 * np.sin(2 * np.pi * 220.0 * t)
+    gap = slice(num_samples // 2 - int(0.05 * sample_rate), num_samples // 2 + int(0.05 * sample_rate))
+    tone[gap] = 0.0
+    return tone, gap
+
+
+def _make_broadband_residual(sample_rate: int, duration_s: float, rng: np.random.Generator) -> np.ndarray:
+    """Broadband noise standing in for the real leftover breath/hiss residual: present across
+    the whole clip (including the vocal's silent/breath gap), unlike the vocal tone itself."""
+    num_samples = int(duration_s * sample_rate)
+    return rng.normal(scale=0.5, size=num_samples)
+
+
+def test_breath_blend_adds_high_frequency_energy_in_silent_breath_region():
+    sample_rate = 44100
+    duration_s = 1.0
+    rng = np.random.default_rng(42)
+
+    vocal, gap = _make_vocal_with_breath_gap(sample_rate, duration_s)
+    residual = _make_broadband_residual(sample_rate, duration_s, rng)
+
+    blended = humanizer.apply_breath_blend(vocal, residual, sample_rate)
+
+    unblended_gap_hf = _hf_energy(vocal[gap], sample_rate)
+    blended_gap_hf = _hf_energy(blended[gap], sample_rate)
+
+    assert blended_gap_hf > unblended_gap_hf * 10
+
+
+def test_breath_blend_does_not_clip():
+    sample_rate = 44100
+    duration_s = 0.5
+
+    # A vocal with realistic headroom (pre-final-limiting, as it is at this point in the
+    # pipeline -- see app.core.remix_master for the true-peak limiter applied later) plus a
+    # residual at a level typical of real stem-separation leftover (quiet breath/hiss, not
+    # full-scale noise): the fixed -18dB gain should keep the blend well clear of clipping.
+    num_samples = int(duration_s * sample_rate)
+    t = np.arange(num_samples) / sample_rate
+    vocal = 0.8 * np.sin(2 * np.pi * 440.0 * t)
+
+    for seed in range(20):
+        residual = np.random.default_rng(seed).normal(scale=0.1, size=num_samples)
+        blended = humanizer.apply_breath_blend(vocal, residual, sample_rate)
+
+        assert np.isfinite(blended).all()
+        assert np.max(np.abs(blended)) <= 1.0
+
+
+def test_breath_blend_intensity_is_fixed_not_configurable():
+    """apply_breath_blend takes no intensity/gain parameter -- the mix amount is controlled
+    solely by the module-level BREATH_BLEND_GAIN_DB constant, per Counsel's spec that this
+    stage is automatic and not user-facing."""
+    import inspect
+
+    params = list(inspect.signature(humanizer.apply_breath_blend).parameters)
+    assert params == ["processed_vocal", "residual_signal", "sample_rate"]
+
+
+def test_breath_blend_handles_stereo_and_length_mismatch():
+    sample_rate = 44100
+    vocal = _sine(220.0, 0.3, sample_rate, channels=2)
+    residual = np.random.default_rng(1).normal(scale=0.3, size=(vocal.shape[0] - 100, 2))
+
+    result = humanizer.apply_breath_blend(vocal, residual, sample_rate)
+
+    assert result.shape == (vocal.shape[0] - 100, 2)
+    assert np.isfinite(result).all()

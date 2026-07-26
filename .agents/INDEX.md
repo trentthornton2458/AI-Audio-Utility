@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** Music Enhancer
-> **Last Updated:** 2026-07-26T05:09:54.760Z
+> **Last Updated:** 2026-07-26T05:16:39.435Z
 
 ---
 
@@ -118,8 +118,8 @@ None specified.
 - [ ] **#1: Add rubberband binary to model_downloader.py** [claude] (Commit: 99d47ac)
 - [ ] **#2: Wire rubberband download into setup_wizard.py UI** [antigravity] (Commit: c8bf985)
 - [ ] **#2: Milestone Review: Milestone 1: Rubberband binary provisioning** [jules] 
-- [/] **#3: Implement pitch-drift humanizer function** [claude] 
-- [ ] **#4: Implement automatic breath/noise blend-back** [claude] 
+- [x] **#3: Implement pitch-drift humanizer function** [claude] (Commit: 3cafb1b)
+- [/] **#4: Implement automatic breath/noise blend-back** [claude] 
 - [ ] **#5: Insert Humanizer stage into vocal_chain.py pipeline** [claude] 
 - [ ] **#6: Add pitch-variance, HF-energy, and crest-factor QA metrics** [claude] 
 - [ ] **#7: Surface QA warnings as a caution badge in vocal_panel.py** [antigravity] 

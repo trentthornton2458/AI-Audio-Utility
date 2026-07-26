@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 import shutil
 import imageio_ffmpeg
+import soundfile as sf
 import torch
 from audio_separator.separator import Separator
 
@@ -19,8 +20,11 @@ logger = get_logger(__name__)
 MODEL_FILENAME = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
 VOCAL_STEM_NAME = "vocal"
 INSTRUMENTAL_STEM_NAME = "instrumental"
+RESIDUAL_STEM_NAME = "residual"
 VOCAL_FILENAME = f"{VOCAL_STEM_NAME}.wav"
 INSTRUMENTAL_FILENAME = f"{INSTRUMENTAL_STEM_NAME}.wav"
+RESIDUAL_FILENAME = f"{RESIDUAL_STEM_NAME}.wav"
+RESIDUAL_SUBTYPE = "PCM_24"
 
 
 def ensure_ffmpeg_in_path(bin_dir: Path) -> Path:
@@ -62,14 +66,24 @@ def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tu
     track_id is the name of normalized_wav_path's parent directory (the track's cache
     folder, as written by app.core.ingestion). If both cached files already exist,
     separation is skipped and their paths are returned directly.
+
+    Also caches the leftover residual (cache/<track_id>/stems/residual.wav): the portion of
+    the original signal that BS-RoFormer's vocal+instrumental split doesn't sum back to,
+    which carries low-level breath/friction detail the neural separator discarded. This is
+    computed even on a stems-cache-hit if missing, so upgrading from an older cache backfills
+    it without forcing a full re-separation. See app.core.humanizer.apply_breath_blend, which
+    blends this back into the processed vocal.
     """
     track_id = normalized_wav_path.parent.name
     stems_dir = cache_manager.stems_dir(track_id)
     vocal_path = stems_dir / VOCAL_FILENAME
     instrumental_path = stems_dir / INSTRUMENTAL_FILENAME
+    residual_path = stems_dir / RESIDUAL_FILENAME
 
     if cache_manager.verify_stem_wav(vocal_path) and cache_manager.verify_stem_wav(instrumental_path):
         logger.info("Using cached stems for track %s: %s, %s", track_id, vocal_path, instrumental_path)
+        if not cache_manager.verify_stem_wav(residual_path):
+            _write_residual_stem(normalized_wav_path, vocal_path, instrumental_path, residual_path)
         return vocal_path, instrumental_path
 
     ensure_ffmpeg_in_path(cache_manager.bin_dir)
@@ -108,8 +122,33 @@ def separate_stems(normalized_wav_path: Path, cache_manager: CacheManager) -> tu
             f"(separator returned {produced})"
         )
 
+    _write_residual_stem(normalized_wav_path, vocal_path, instrumental_path, residual_path)
+
     logger.info("Separated stems for track %s -> %s, %s", track_id, vocal_path, instrumental_path)
     return vocal_path, instrumental_path
+
+
+def _write_residual_stem(
+    normalized_wav_path: Path, vocal_path: Path, instrumental_path: Path, residual_path: Path
+) -> None:
+    """Compute and cache the residual/leftover signal not captured by either predicted stem.
+
+    residual = original - vocal - instrumental. Aligned by truncating to the shortest of the
+    three (channel count and sample count), since BS-RoFormer's chunked inference can produce
+    stems a few samples shorter/longer than the source.
+    """
+    original, samplerate = sf.read(str(normalized_wav_path), always_2d=True, dtype="float64")
+    vocal, _ = sf.read(str(vocal_path), always_2d=True, dtype="float64")
+    instrumental, _ = sf.read(str(instrumental_path), always_2d=True, dtype="float64")
+
+    length = min(original.shape[0], vocal.shape[0], instrumental.shape[0])
+    channels = min(original.shape[1], vocal.shape[1], instrumental.shape[1])
+    residual = (
+        original[:length, :channels] - vocal[:length, :channels] - instrumental[:length, :channels]
+    )
+
+    sf.write(str(residual_path), residual, samplerate, subtype=RESIDUAL_SUBTYPE)
+    logger.info("Wrote residual stem for %s -> %s", normalized_wav_path.parent.name, residual_path)
 
 
 def _resolve_output_path(name: str, stems_dir: Path) -> Path:
