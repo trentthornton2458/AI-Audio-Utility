@@ -198,10 +198,10 @@ def test_full_pipeline_via_render_job(tmp_path: Path, monkeypatch: pytest.Monkey
     job = RenderJob(input_path=input_file, preset=preset, cache_manager=cache_mgr)
 
     # Set up signal listeners
-    visited_stages = []
-    progress_values = []
-    finished_paths = []
-    failed_messages = []
+    visited_stages: list[str] = []
+    progress_values: list[int] = []
+    finished_paths: list[Path] = []
+    failed_messages: list[str] = []
 
     job.stageChanged.connect(visited_stages.append)
     job.progressChanged.connect(progress_values.append)

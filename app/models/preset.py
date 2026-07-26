@@ -81,7 +81,7 @@ def _migrate_legacy_preset_dict(raw_data: dict) -> dict:
         migrated.pop(key, None)
 
     for key in _LEGACY_CAPPED_FIELDS:
-        new_max = PRESET_SCHEMA["properties"][key]["maximum"]
+        new_max = PRESET_SCHEMA["properties"][key]["maximum"] # type: ignore
         val = migrated.get(key)
         if isinstance(val, (int, float)) and not isinstance(val, bool) and val > new_max:
             migrated[key] = new_max
@@ -123,7 +123,7 @@ def sanitize_preset_dict(raw_data: dict) -> tuple[dict, list[str]]:
         "humanizer_intensity": 0.25,
     }
 
-    properties = PRESET_SCHEMA["properties"]
+    properties: dict = PRESET_SCHEMA["properties"] # type: ignore
 
     for key, spec in properties.items():
         if key not in raw_data:

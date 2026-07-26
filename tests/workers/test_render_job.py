@@ -125,7 +125,7 @@ def test_render_job_failure_signal(tmp_path: Path):
     preset = Preset()
     job = RenderJob(input_path=input_path, preset=preset, cache_manager=cache_mgr)
 
-    failed_messages = []
+    failed_messages: list[str] = []
     job.failed.connect(lambda msg: failed_messages.append(msg))
 
     with patch("app.core.ingestion.load_and_normalize_track", side_effect=ValueError("Corrupt WAV format")):
@@ -148,7 +148,7 @@ def test_render_job_progress_emission(tmp_path: Path):
     qa_result = qa_gate.QAGateResult(audio=dummy_audio, samplerate=44100, qa_flags=[])
     humanized_path = _write_humanized_stub(tmp_path, dummy_audio)
 
-    progress_vals = []
+    progress_vals: list[int] = []
     job.progressChanged.connect(progress_vals.append)
 
     with patch("app.core.ingestion.load_and_normalize_track", return_value=tmp_path / "cache" / "track123" / "input.wav"), \
@@ -285,7 +285,7 @@ def test_render_job_failure_removes_partial_files(tmp_path: Path):
 
     job._active_files.add(file1)
 
-    failed_messages = []
+    failed_messages: list[str] = []
     job.failed.connect(failed_messages.append)
 
     with patch.object(job, "_render", side_effect=ValueError("Unexpected DSP error")):

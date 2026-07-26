@@ -74,7 +74,7 @@ def _wav_bytes(audio: np.ndarray, samplerate: int) -> bytes:
 
 
 def _clamp(key: str, value: float) -> float:
-    bounds = _BOUNDS[key]
+    bounds: dict = _BOUNDS[key] # type: ignore
     return max(bounds["minimum"], min(bounds["maximum"], float(value)))
 
 
