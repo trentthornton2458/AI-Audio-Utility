@@ -50,6 +50,7 @@ def main() -> None:
 
     window = MainWindow(cache_manager=cache_manager)
     window.show()
+    window.check_reference_assets_fallback()
     sys.exit(app.exec())
 
 

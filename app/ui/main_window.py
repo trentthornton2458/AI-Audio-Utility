@@ -38,6 +38,7 @@ from app.models.settings import Settings
 from app.ui.ab_compare_view import ABCompareView
 from app.ui.gemini_settings_dialog import GeminiSettingsDialog
 from app.ui.instrumental_panel import InstrumentalPanel
+from app.ui.reference_fallback_dialog import ReferenceFallbackDialog, check_reference_assets_fallback
 from app.ui.vocal_panel import VocalPanel
 from app.workers.render_job import RenderJob
 from app.workers.separation_job import SeparationJob
@@ -270,6 +271,10 @@ class MainWindow(QMainWindow):
         gemini_key_action = QAction("Gemini API Key...", self)
         gemini_key_action.triggered.connect(self.on_edit_gemini_key_clicked)
         settings_menu.addAction(gemini_key_action)
+
+        ref_assets_action = QAction("Reference Audio Stems...", self)
+        ref_assets_action.triggered.connect(self.on_edit_reference_assets_clicked)
+        settings_menu.addAction(ref_assets_action)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -564,6 +569,15 @@ class MainWindow(QMainWindow):
     def on_edit_gemini_key_clicked(self) -> None:
         dialog = GeminiSettingsDialog(self)
         dialog.exec()
+
+    @Slot()
+    def on_edit_reference_assets_clicked(self) -> None:
+        dialog = ReferenceFallbackDialog(self)
+        dialog.exec()
+
+    def check_reference_assets_fallback(self) -> Optional[Path]:
+        """Trigger first-run fallback modal if default reference stems are missing and not previously seen."""
+        return check_reference_assets_fallback(parent=self)
 
     @Slot(str)
     def on_separation_failed(self, error: str) -> None:

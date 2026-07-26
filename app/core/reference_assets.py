@@ -15,6 +15,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from PySide6.QtCore import QSettings
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FACTORY_REFERENCES_DIR = PROJECT_ROOT / "assets" / "factory_references"
 
@@ -28,6 +30,49 @@ REFERENCE_STEM_KEYS: tuple[str, ...] = (
 
 REFERENCE_STEM_FILENAME_SUFFIX = ".wav"
 
+ORGANIZATION_NAME = "MusicMasteryEnhancer"
+APPLICATION_NAME = "MusicMasteryEnhancer"
+SETTINGS_KEY_CUSTOM_OVERRIDE = "custom_reference_override_path"
+SETTINGS_KEY_MODAL_SEEN = "missing_reference_modal_seen"
+
+
+def get_custom_reference_override_path() -> Optional[Path]:
+    """Get stored custom reference override path from QSettings if set and valid, else None."""
+    settings = QSettings(ORGANIZATION_NAME, APPLICATION_NAME)
+    val = settings.value(SETTINGS_KEY_CUSTOM_OVERRIDE, type=str)
+    if val:
+        path = Path(val)
+        if path.is_dir():
+            return path
+    return None
+
+
+def set_custom_reference_override_path(override_dir: Optional[Path]) -> None:
+    """Save custom reference override path to QSettings."""
+    settings = QSettings(ORGANIZATION_NAME, APPLICATION_NAME)
+    if override_dir is not None:
+        settings.setValue(SETTINGS_KEY_CUSTOM_OVERRIDE, str(override_dir))
+    else:
+        settings.remove(SETTINGS_KEY_CUSTOM_OVERRIDE)
+
+
+def has_seen_missing_reference_modal() -> bool:
+    """Return True if the user has already seen/dismissed the missing reference modal."""
+    settings = QSettings(ORGANIZATION_NAME, APPLICATION_NAME)
+    return settings.value(SETTINGS_KEY_MODAL_SEEN, False, type=bool)
+
+
+def set_seen_missing_reference_modal(seen: bool = True) -> None:
+    """Save whether the user has seen/dismissed the missing reference modal."""
+    settings = QSettings(ORGANIZATION_NAME, APPLICATION_NAME)
+    settings.setValue(SETTINGS_KEY_MODAL_SEEN, seen)
+
+
+def reset_missing_reference_modal_seen() -> None:
+    """Reset the missing reference modal seen flag in QSettings (useful for testing/resets)."""
+    settings = QSettings(ORGANIZATION_NAME, APPLICATION_NAME)
+    settings.remove(SETTINGS_KEY_MODAL_SEEN)
+
 
 def _stem_path(directory: Path, key: str) -> Path:
     return directory / f"{key}{REFERENCE_STEM_FILENAME_SUFFIX}"
@@ -37,12 +82,14 @@ def get_reference_stems(override_dir: Optional[Path] = None) -> dict[str, Option
     """Return the 4 expected reference stem paths, keyed by REFERENCE_STEM_KEYS.
 
     Resolves against `override_dir` if given (pass
-    Settings.custom_reference_override_path), else the bundled FACTORY_REFERENCES_DIR --
-    the override takes precedence over the bundled factory files, per Counsel's spec. A key's
-    value is its Path if the file exists on disk, else None, so callers can skip/disable that
-    slot in the A/B UI instead of failing the whole comparison.
+    Settings.custom_reference_override_path), else checks saved persistent custom override,
+    and falls back to the bundled FACTORY_REFERENCES_DIR -- the override takes precedence over
+    the bundled factory files, per Counsel's spec. A key's value is its Path if the file exists
+    on disk, else None, so callers can skip/disable that slot in the A/B UI instead of failing
+    the whole comparison.
     """
-    directory = override_dir if override_dir is not None else FACTORY_REFERENCES_DIR
+    effective_dir = override_dir if override_dir is not None else get_custom_reference_override_path()
+    directory = effective_dir if effective_dir is not None else FACTORY_REFERENCES_DIR
     stems: dict[str, Optional[Path]] = {}
     for key in REFERENCE_STEM_KEYS:
         path = _stem_path(directory, key)
@@ -60,3 +107,4 @@ def is_reference_assets_missing(directory: Optional[Path] = None) -> bool:
     """
     target_dir = directory if directory is not None else FACTORY_REFERENCES_DIR
     return any(not _stem_path(target_dir, key).is_file() for key in REFERENCE_STEM_KEYS)
+
