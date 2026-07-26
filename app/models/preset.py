@@ -27,7 +27,8 @@ PRESET_SCHEMA = {
         "instrumental_dehiss_gain_db": { "type": "number", "minimum": -6.0, "maximum": 0.0 },
         "instrumental_gain_db": { "type": "number", "minimum": -24.0, "maximum": 24.0 },
         "notch_depth_db": { "type": "number", "minimum": 3.0, "maximum": 6.0 },
-        "lufs_target": { "type": "number", "minimum": -30.0, "maximum": -5.0 }
+        "lufs_target": { "type": "number", "minimum": -30.0, "maximum": -5.0 },
+        "humanizer_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
     },
     "required": [
         "version",
@@ -46,7 +47,8 @@ PRESET_SCHEMA = {
         "instrumental_dehiss_gain_db",
         "instrumental_gain_db",
         "notch_depth_db",
-        "lufs_target"
+        "lufs_target",
+        "humanizer_intensity"
     ],
     "additionalProperties": False
 }
@@ -118,6 +120,7 @@ def sanitize_preset_dict(raw_data: dict) -> tuple[dict, list[str]]:
         "instrumental_gain_db": 0.0,
         "notch_depth_db": 4.5,
         "lufs_target": -14.0,
+        "humanizer_intensity": 0.25,
     }
 
     properties = PRESET_SCHEMA["properties"]
@@ -198,6 +201,11 @@ class Preset:
 
     notch_depth_db: float = 4.5
     lufs_target: float = -14.0
+
+    # Humanizer pitch-drift depth/rate control (app.core.humanizer.apply_pitch_drift), applied
+    # to the QA-gated blended vocal output; 0.25 is the "on_conservative" default (~20-30% of the
+    # full +/-3-5 cent drift range). The automatic breath blend-back has no user-facing control.
+    humanizer_intensity: float = 0.25
 
     def to_dict(self) -> dict:
         """Convert Preset to a dictionary and validate against JSON Schema."""

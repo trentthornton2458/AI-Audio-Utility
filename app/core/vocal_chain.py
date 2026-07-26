@@ -1,9 +1,11 @@
 """Vocal stem pipeline: neural denoise pass (pre-DSP), adjustable Pedalboard DSP chain
-(HPF/LPF/notch/de-esser), neural enhance pass (post-DSP, the last AI stage), and a
-QA-gated capped residual blend of the enhance output back into the DSP signal."""
+(HPF/LPF/notch/de-esser), neural enhance pass (post-DSP, the last AI stage), a
+QA-gated capped residual blend of the enhance output back into the DSP signal, and a
+Humanizer pass (pitch drift + automatic breath blend-back) on that QA-gated output."""
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -13,7 +15,7 @@ from pedalboard import Compressor, HighpassFilter, LowpassFilter, Pedalboard, Pe
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
-from app.core import neural_common, qa_gate
+from app.core import humanizer, neural_common, qa_gate
 
 logger = get_logger(__name__)
 
@@ -185,6 +187,94 @@ def blend_vocal(
         stem_label="vocal",
         gemini_api_key=gemini_api_key,
     )
+
+
+def run_humanizer_pass(
+    vocal_audio_path: Path,
+    humanizer_intensity: float,
+    residual_stem_path: Path,
+    cache_manager: CacheManager,
+    progress_callback: Optional[Callable[[float], None]] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
+) -> Path:
+    """Run the Humanizer stage on the QA-gated blended vocal output -- the last vocal-only
+    stage, run strictly after app.core.qa_gate's capped blend and strictly before remix/mastering.
+
+    Applies app.core.humanizer.apply_pitch_drift (LFO micro-pitch drift, depth/rate scaled by
+    humanizer_intensity, clamped to [0.0, 1.0]) followed by apply_breath_blend, which mixes the
+    cached stem-separation residual at residual_stem_path back in at its fixed automatic amount
+    (not user-controlled, per Counsel's spec).
+
+    Cached at cache/<track_id>/stems/vocal_neural_humanize_<settings_hash>.wav, where
+    settings_hash is derived from (humanizer_intensity, content-hash of vocal_audio_path) --
+    like run_enhance_pass, this stage's cache key must track its input's *content* rather than
+    just the intensity, since any upstream change (denoise/DSP/enhance/QA blend) needs to
+    invalidate it. track_id is inferred from vocal_audio_path's location under the track's
+    stems folder.
+    """
+    if is_cancelled and is_cancelled():
+        raise InterruptedError("Humanizer pass cancelled")
+
+    if progress_callback:
+        progress_callback(0.0)
+
+    humanizer_intensity = _clamp(humanizer_intensity, 0.0, 1.0)
+
+    track_id = vocal_audio_path.parent.parent.name
+    content_hash = CacheManager.compute_track_id(vocal_audio_path)
+    settings_hash = _hash_humanizer_settings(humanizer_intensity, content_hash)
+    output_path = cache_manager.stems_dir(track_id) / f"{NEURAL_FILENAME_PREFIX}humanize_{settings_hash}.wav"
+
+    if cache_manager.verify_stem_wav(output_path):
+        logger.info(
+            "Using cached humanizer pass for %s stem of track %s: %s", NEURAL_STEM_LABEL, track_id, output_path
+        )
+        if progress_callback:
+            progress_callback(1.0)
+        return output_path
+
+    audio, samplerate = sf.read(str(vocal_audio_path), always_2d=True, dtype="float64")
+
+    if is_cancelled and is_cancelled():
+        raise InterruptedError("Humanizer pass cancelled")
+
+    drifted = humanizer.apply_pitch_drift(audio, samplerate, humanizer_intensity)
+    if progress_callback:
+        progress_callback(0.5)
+
+    if is_cancelled and is_cancelled():
+        raise InterruptedError("Humanizer pass cancelled")
+
+    residual_audio, residual_samplerate = sf.read(str(residual_stem_path), always_2d=True, dtype="float64")
+    if residual_samplerate != samplerate:
+        raise ValueError(
+            f"Sample rate mismatch between vocal signal ({samplerate}Hz) "
+            f"and residual stem ({residual_samplerate}Hz)"
+        )
+    humanized = humanizer.apply_breath_blend(drifted, residual_audio, samplerate)
+
+    sf.write(str(output_path), humanized, samplerate, subtype=DSP_SUBTYPE)
+    logger.info(
+        "Wrote humanizer pass (intensity=%.2f) for %s stem of track %s -> %s",
+        humanizer_intensity,
+        NEURAL_STEM_LABEL,
+        track_id,
+        output_path,
+    )
+    if progress_callback:
+        progress_callback(1.0)
+    return output_path
+
+
+def _hash_humanizer_settings(humanizer_intensity: float, content_hash: str) -> str:
+    """Derive a short, stable hash identifying this humanizer-pass settings combination.
+
+    Includes a content hash of the QA-blended vocal input (not just the intensity) since this
+    stage runs after the QA gate: any upstream denoise/DSP/enhance/QA-blend change must
+    invalidate this cache entry.
+    """
+    payload = f"{humanizer_intensity:.6f}|{content_hash}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:

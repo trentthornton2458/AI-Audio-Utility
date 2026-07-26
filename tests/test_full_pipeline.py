@@ -24,7 +24,7 @@ import soundfile as sf
 import torch
 
 from app.cache.cache_manager import CacheManager
-from app.core import separation
+from app.core import humanizer, separation
 from app.core.ingestion import load_and_normalize_track
 from app.core.instrumental_chain import InstrumentalEqParams, apply_dsp_chain as apply_inst_dsp
 from app.core.remix_master import export_wav, master, mix_stems
@@ -71,6 +71,17 @@ def mock_denoise(current: torch.Tensor, current_sr: int, device: torch.device) -
 def mock_enhance(current: torch.Tensor, current_sr: int, device: torch.device) -> tuple[torch.Tensor, int]:
     """Fast mock of resemble-enhance enhance step returning non-zero scaled Tensor."""
     return current * 0.90, current_sr
+
+
+def mock_apply_pitch_drift(audio: np.ndarray, sample_rate: int, intensity: float) -> np.ndarray:
+    """Fast mock of the Humanizer's pitch-drift stage, standing in for the real pyrubberband/
+    rubberband-CLI implementation, which needs a downloaded binary not present in this test env."""
+    return audio * 0.99
+
+
+def mock_apply_breath_blend(processed_vocal: np.ndarray, residual_signal: np.ndarray, sample_rate: int) -> np.ndarray:
+    """Fast mock of the Humanizer's breath blend-back stage."""
+    return processed_vocal
 
 
 def test_full_pipeline_end_to_end(tmp_path: Path):
@@ -180,6 +191,8 @@ def test_full_pipeline_via_render_job(tmp_path: Path, monkeypatch: pytest.Monkey
         "app.core.neural_common._lazy_import_resemble_enhance",
         lambda: (mock_denoise, mock_enhance)
     )
+    monkeypatch.setattr(humanizer, "apply_pitch_drift", mock_apply_pitch_drift)
+    monkeypatch.setattr(humanizer, "apply_breath_blend", mock_apply_breath_blend)
 
     # Instantiate RenderJob
     job = RenderJob(input_path=input_file, preset=preset, cache_manager=cache_mgr)

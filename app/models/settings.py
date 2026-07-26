@@ -31,6 +31,7 @@ class Settings(Preset):
             instrumental_gain_db=preset.instrumental_gain_db,
             notch_depth_db=preset.notch_depth_db,
             lufs_target=preset.lufs_target,
+            humanizer_intensity=preset.humanizer_intensity,
         )
 
     def to_preset(self) -> Preset:
@@ -53,4 +54,5 @@ class Settings(Preset):
             instrumental_gain_db=self.instrumental_gain_db,
             notch_depth_db=self.notch_depth_db,
             lufs_target=self.lufs_target,
+            humanizer_intensity=self.humanizer_intensity,
         )

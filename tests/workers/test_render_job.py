@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -19,6 +20,7 @@ for mod_name in [
 
 import numpy as np
 import pytest
+import soundfile as sf
 from app.cache.cache_manager import CacheManager
 from app.core import qa_gate
 from app.models.app_config import AppConfig
@@ -26,10 +28,23 @@ from app.models.preset import Preset
 from app.workers.render_job import RenderJob
 
 
+def _write_humanized_stub(tmp_path: Path, dummy_audio: np.ndarray) -> Path:
+    """A real WAV file standing in for app.core.vocal_chain.run_humanizer_pass's output.
+
+    RenderJob._process_vocal reads this path back via soundfile after the (mocked) humanizer
+    pass returns it, so the mock's return value must be a real, readable file rather than an
+    arbitrary unwritten path.
+    """
+    humanized_path = tmp_path / "humanized_vocal.wav"
+    sf.write(str(humanized_path), dummy_audio, 44100, subtype="PCM_24")
+    return humanized_path
+
+
 def _patched_pipeline(tmp_path: Path, dummy_audio: np.ndarray):
     """Common set of patches standing in for every pipeline stage RenderJob._render calls,
-    updated for the denoise -> DSP -> enhance -> QA-gated-blend order."""
+    updated for the denoise -> DSP -> enhance -> QA-gated-blend -> Humanizer order."""
     qa_result = qa_gate.QAGateResult(audio=dummy_audio, samplerate=44100, qa_flags=[])
+    humanized_path = _write_humanized_stub(tmp_path, dummy_audio)
     return [
         patch(
             "app.core.ingestion.load_and_normalize_track",
@@ -40,6 +55,7 @@ def _patched_pipeline(tmp_path: Path, dummy_audio: np.ndarray):
         patch("app.core.vocal_chain.apply_dsp_chain"),
         patch("app.core.vocal_chain.run_enhance_pass", return_value=tmp_path / "e_vocal.wav"),
         patch("app.core.vocal_chain.blend_vocal", return_value=qa_result),
+        patch("app.core.vocal_chain.run_humanizer_pass", return_value=humanized_path),
         patch("app.core.instrumental_chain.run_denoise_pass", return_value=tmp_path / "n_inst.wav"),
         patch("app.core.instrumental_chain.apply_dsp_chain"),
         patch("app.core.instrumental_chain.run_enhance_pass", return_value=tmp_path / "e_inst.wav"),
@@ -62,10 +78,9 @@ def test_render_job_writes_metadata(tmp_path: Path):
     job = RenderJob(input_path=input_path, preset=preset, cache_manager=cache_mgr)
     dummy_audio = np.zeros((44100, 2), dtype=np.float64)
 
-    patchers = _patched_pipeline(tmp_path, dummy_audio)
-    with patchers[0], patchers[1], patchers[2], patchers[3], patchers[4], patchers[5], \
-         patchers[6], patchers[7], patchers[8], patchers[9], patchers[10], patchers[11], \
-         patchers[12], patchers[13]:
+    with ExitStack() as stack:
+        for patcher in _patched_pipeline(tmp_path, dummy_audio):
+            stack.enter_context(patcher)
 
         output_path = job._render()
 
@@ -131,6 +146,7 @@ def test_render_job_progress_emission(tmp_path: Path):
     job = RenderJob(input_path=input_path, preset=preset, cache_manager=cache_mgr)
     dummy_audio = np.zeros((44100, 2), dtype=np.float64)
     qa_result = qa_gate.QAGateResult(audio=dummy_audio, samplerate=44100, qa_flags=[])
+    humanized_path = _write_humanized_stub(tmp_path, dummy_audio)
 
     progress_vals = []
     job.progressChanged.connect(progress_vals.append)
@@ -141,6 +157,7 @@ def test_render_job_progress_emission(tmp_path: Path):
          patch("app.core.vocal_chain.apply_dsp_chain"), \
          patch("app.core.vocal_chain.run_enhance_pass", return_value=tmp_path / "e_vocal.wav") as mock_v_enhance, \
          patch("app.core.vocal_chain.blend_vocal", return_value=qa_result), \
+         patch("app.core.vocal_chain.run_humanizer_pass", return_value=humanized_path) as mock_v_humanizer, \
          patch("app.core.instrumental_chain.run_denoise_pass", return_value=tmp_path / "n_inst.wav") as mock_i_denoise, \
          patch("app.core.instrumental_chain.apply_dsp_chain"), \
          patch("app.core.instrumental_chain.run_enhance_pass", return_value=tmp_path / "e_inst.wav") as mock_i_enhance, \
@@ -156,10 +173,66 @@ def test_render_job_progress_emission(tmp_path: Path):
         for i in range(len(progress_vals) - 1):
             assert progress_vals[i] <= progress_vals[i + 1]
 
-        for mock_pass in (mock_v_denoise, mock_v_enhance, mock_i_denoise, mock_i_enhance):
+        for mock_pass in (mock_v_denoise, mock_v_enhance, mock_v_humanizer, mock_i_denoise, mock_i_enhance):
             mock_pass.assert_called_once()
             assert "progress_callback" in mock_pass.call_args[1]
             assert "is_cancelled" in mock_pass.call_args[1]
+
+
+def test_render_job_humanizer_runs_after_qa_blend_and_before_remix(tmp_path: Path):
+    """The Humanizer stage must run strictly after vocal_chain.blend_vocal's QA-gated blend and
+    strictly before remix_master.mix_stems, which is the current hand-off point into remix/master."""
+    config = AppConfig(cache_root=tmp_path / "cache")
+    cache_mgr = CacheManager(config=config)
+
+    input_path = tmp_path / "input.wav"
+    input_path.touch()
+
+    preset = Preset(humanizer_intensity=0.4)
+    job = RenderJob(input_path=input_path, preset=preset, cache_manager=cache_mgr)
+    dummy_audio = np.zeros((44100, 2), dtype=np.float64)
+    qa_result = qa_gate.QAGateResult(audio=dummy_audio, samplerate=44100, qa_flags=[])
+    humanized_path = _write_humanized_stub(tmp_path, dummy_audio)
+
+    call_order: list[str] = []
+
+    def blend_vocal_side_effect(*args, **kwargs):
+        call_order.append("blend_vocal")
+        return qa_result
+
+    def humanizer_side_effect(*args, **kwargs):
+        call_order.append("run_humanizer_pass")
+        return humanized_path
+
+    def mix_stems_side_effect(*args, **kwargs):
+        call_order.append("mix_stems")
+        return dummy_audio
+
+    with patch("app.core.ingestion.load_and_normalize_track", return_value=tmp_path / "cache" / "track123" / "input.wav"), \
+         patch("app.core.separation.separate_stems", return_value=(tmp_path / "vocal.wav", tmp_path / "inst.wav")), \
+         patch("app.core.vocal_chain.run_denoise_pass", return_value=tmp_path / "n_vocal.wav"), \
+         patch("app.core.vocal_chain.apply_dsp_chain"), \
+         patch("app.core.vocal_chain.run_enhance_pass", return_value=tmp_path / "e_vocal.wav"), \
+         patch("app.core.vocal_chain.blend_vocal", side_effect=blend_vocal_side_effect), \
+         patch("app.core.vocal_chain.run_humanizer_pass", side_effect=humanizer_side_effect) as mock_humanizer, \
+         patch("app.core.instrumental_chain.run_denoise_pass", return_value=tmp_path / "n_inst.wav"), \
+         patch("app.core.instrumental_chain.apply_dsp_chain"), \
+         patch("app.core.instrumental_chain.run_enhance_pass", return_value=tmp_path / "e_inst.wav"), \
+         patch("app.core.instrumental_chain.blend_instrumental", return_value=qa_result), \
+         patch("app.models.gemini_settings.get_gemini_api_key", return_value=None), \
+         patch("app.core.remix_master.mix_stems", side_effect=mix_stems_side_effect), \
+         patch("app.core.remix_master.master", return_value=dummy_audio), \
+         patch("app.core.remix_master.export_wav", side_effect=lambda audio, sr, p: p):
+
+        job._render()
+
+    assert call_order == ["blend_vocal", "run_humanizer_pass", "mix_stems"]
+
+    mock_humanizer.assert_called_once()
+    call_args, call_kwargs = mock_humanizer.call_args
+    assert call_args[1] == preset.humanizer_intensity
+    assert "progress_callback" in call_kwargs
+    assert "is_cancelled" in call_kwargs
 
 
 def test_render_job_cancellation_removes_partial_files(tmp_path: Path):

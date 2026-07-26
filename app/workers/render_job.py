@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import soundfile as sf
 from PySide6.QtCore import QObject, QThread, Signal
 
 from app.cache import get_logger
@@ -27,6 +28,8 @@ logger = get_logger(__name__)
 
 VOCAL_DSP_FILENAME = "vocal_dsp.wav"
 INSTRUMENTAL_DSP_FILENAME = "instrumental_dsp.wav"
+VOCAL_QA_BLEND_FILENAME = "vocal_qa_blend.wav"
+VOCAL_QA_BLEND_SUBTYPE = "PCM_24"
 
 # (stage name, fraction of total progress it accounts for); must sum to 1.0.
 _STAGE_WEIGHTS: list[tuple[str, float]] = [
@@ -48,10 +51,13 @@ class RenderJob(QThread):
 
     Each stem runs: neural denoise (pre-DSP) -> Pedalboard DSP chain -> neural enhance
     (post-DSP, the last AI stage) -> app.core.qa_gate-gated capped residual blend of the
-    enhance output back into the DSP signal. Both the denoise and enhance passes are cached
-    independently by settings hash (see app.core.neural_common), so re-running a job with a
-    Preset whose denoise settings are unchanged skips straight to the DSP stage, and changing
-    only a DSP parameter still re-runs enhance (its cache key tracks the DSP output's content).
+    enhance output back into the DSP signal. The vocal stem additionally runs a Humanizer pass
+    (app.core.vocal_chain.run_humanizer_pass: pitch drift + automatic breath blend-back) on that
+    QA-gated output, strictly before the mix/master hand-off. Denoise, enhance, and humanizer
+    are each cached independently by settings hash (see app.core.neural_common and
+    app.core.vocal_chain), so re-running a job with a Preset whose denoise settings are
+    unchanged skips straight to the DSP stage, and changing only a DSP parameter still re-runs
+    enhance and humanizer (their cache keys track upstream output content).
     """
 
     stageChanged = Signal(str)
@@ -167,6 +173,9 @@ class RenderJob(QThread):
 
     def _enhance_progress_callback_vocal(self, fraction: float) -> None:
         self._sub_progress("Denoising Vocal", 0.45 + 0.40 * fraction)
+
+    def _humanizer_progress_callback_vocal(self, fraction: float) -> None:
+        self._sub_progress("Denoising Vocal", 0.9 + 0.1 * fraction)
 
     def _denoise_progress_callback_instrumental(self, fraction: float) -> None:
         self._sub_progress("Denoising Instrumental", 0.35 * fraction)
@@ -312,10 +321,31 @@ class RenderJob(QThread):
         qa_result = vocal_chain.blend_vocal(
             dsp_vocal_path, enhanced_vocal_path, preset.vocal_enhance_intensity, gemini_api_key=gemini_api_key
         )
+        self._sub_progress("Denoising Vocal", 0.9)
+        self._checkpoint()
+
+        qa_blend_vocal_path = cache_manager.stems_dir(track_id) / VOCAL_QA_BLEND_FILENAME
+        self._active_files.add(qa_blend_vocal_path)
+        sf.write(str(qa_blend_vocal_path), qa_result.audio, qa_result.samplerate, subtype=VOCAL_QA_BLEND_SUBTYPE)
+        self._active_files.discard(qa_blend_vocal_path)
+
+        residual_stem_path = cache_manager.stems_dir(track_id) / separation.RESIDUAL_FILENAME
+        try:
+            humanized_vocal_path = vocal_chain.run_humanizer_pass(
+                qa_blend_vocal_path,
+                preset.humanizer_intensity,
+                residual_stem_path,
+                cache_manager,
+                progress_callback=self._humanizer_progress_callback_vocal,
+                is_cancelled=self.isInterruptionRequested,
+            )
+        except InterruptedError:
+            raise _JobCancelled()
         self._sub_progress("Denoising Vocal", 1.0)
         self._checkpoint()
 
-        return qa_result.audio, qa_result.samplerate, qa_result.qa_flags
+        humanized_audio, humanized_samplerate = sf.read(str(humanized_vocal_path), always_2d=True, dtype="float64")
+        return humanized_audio, humanized_samplerate, qa_result.qa_flags
 
     def _process_instrumental(
         self,
