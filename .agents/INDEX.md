@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** Music Enhancer
-> **Last Updated:** 2026-07-26T07:05:37.132Z
+> **Last Updated:** 2026-07-26T07:07:36.202Z
 
 ---
 
@@ -114,7 +114,7 @@ None specified.
 
 ---
 
-## 4. Execution Task Sequence (16 tasks)
+## 4. Execution Task Sequence (17 tasks)
 - [ ] **#1: Add rubberband binary to model_downloader.py** [claude] (Commit: 99d47ac)
 - [ ] **#2: Wire rubberband download into setup_wizard.py UI** [antigravity] (Commit: c8bf985)
 - [ ] **#2: Milestone Review: Milestone 1: Rubberband binary provisioning** [jules] 
@@ -123,7 +123,8 @@ None specified.
 - [x] **#5: Insert Humanizer stage into vocal_chain.py pipeline** [claude] (Commit: bd3b23c)
 - [ ] **#5: Milestone Review: Milestone 2: Humanizer DSP stage (pitch drift + breath blend-back)** [jules] 
 - [x] **#6: Add pitch-variance, HF-energy, and crest-factor QA metrics** [claude] (Commit: 3bb88e2)
-- [/] **#7: Surface QA warnings as a caution badge in vocal_panel.py** [antigravity] 
+- [x] **#7: Surface QA warnings as a caution badge in vocal_panel.py** [antigravity] (Commit: 89ce8a0)
+- [/] **#7: Milestone Review: Milestone 3: QA gate metric additions** [jules] 
 - [ ] **#8: Create factory reference asset loading + fallback logic** [claude] 
 - [ ] **#9: First-run fallback modal for missing reference assets** [antigravity] 
 - [ ] **#10: Extend A/B compare UI with Raw / Humanized / Reference blind toggle** [antigravity] 
