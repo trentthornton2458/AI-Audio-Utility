@@ -108,3 +108,47 @@ def is_reference_assets_missing(directory: Optional[Path] = None) -> bool:
     target_dir = directory if directory is not None else FACTORY_REFERENCES_DIR
     return any(not _stem_path(target_dir, key).is_file() for key in REFERENCE_STEM_KEYS)
 
+
+def select_reference_stem(
+    vocal_metadata: Optional[dict] = None,
+    override_dir: Optional[Path] = None,
+) -> tuple[Optional[str], Optional[Path]]:
+    """Select the best matching reference stem key and path based on vocal metadata.
+
+    Returns (key, path) tuple if a valid stem file is found, else (None, None).
+    """
+    stems = get_reference_stems(override_dir=override_dir)
+    if not any(stems.values()):
+        return None, None
+
+    if vocal_metadata:
+        gender = str(vocal_metadata.get("gender") or vocal_metadata.get("vocal_gender") or "").lower().strip()
+        v_type = str(vocal_metadata.get("type") or vocal_metadata.get("vocal_type") or "").lower().strip()
+
+        candidates: list[str] = []
+        if gender and v_type:
+            candidates.append(f"{gender}_{v_type}")
+        if gender:
+            candidates.extend([f"{gender}_tuned", f"{gender}_dry"])
+            for key in stems:
+                if key.startswith(gender) and key not in candidates:
+                    candidates.append(key)
+
+        for key in candidates:
+            if stems.get(key) is not None:
+                return key, stems[key]
+
+    # Sensible default selection order
+    default_order = ("female_tuned", "male_tuned", "female_dry", "male_dry")
+    for key in default_order:
+        if stems.get(key) is not None:
+            return key, stems[key]
+
+    # Fallback to any available stem
+    for key, path in stems.items():
+        if path is not None:
+            return key, path
+
+    return None, None
+
+

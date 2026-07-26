@@ -42,6 +42,7 @@ class Settings(Preset):
             notch_depth_db=preset.notch_depth_db,
             lufs_target=preset.lufs_target,
             humanizer_intensity=preset.humanizer_intensity,
+            voice_conversion_blend=preset.voice_conversion_blend,
         )
 
     def to_preset(self) -> Preset:
@@ -65,4 +66,5 @@ class Settings(Preset):
             notch_depth_db=self.notch_depth_db,
             lufs_target=self.lufs_target,
             humanizer_intensity=self.humanizer_intensity,
+            voice_conversion_blend=self.voice_conversion_blend,
         )

@@ -28,7 +28,8 @@ PRESET_SCHEMA = {
         "instrumental_gain_db": { "type": "number", "minimum": -24.0, "maximum": 24.0 },
         "notch_depth_db": { "type": "number", "minimum": 3.0, "maximum": 6.0 },
         "lufs_target": { "type": "number", "minimum": -30.0, "maximum": -5.0 },
-        "humanizer_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+        "humanizer_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "voice_conversion_blend": { "type": "number", "minimum": 0.0, "maximum": 0.3 }
     },
     "required": [
         "version",
@@ -48,7 +49,8 @@ PRESET_SCHEMA = {
         "instrumental_gain_db",
         "notch_depth_db",
         "lufs_target",
-        "humanizer_intensity"
+        "humanizer_intensity",
+        "voice_conversion_blend"
     ],
     "additionalProperties": False
 }
@@ -121,6 +123,7 @@ def sanitize_preset_dict(raw_data: dict) -> tuple[dict, list[str]]:
         "notch_depth_db": 4.5,
         "lufs_target": -14.0,
         "humanizer_intensity": 0.25,
+        "voice_conversion_blend": 0.0,
     }
 
     properties: dict = PRESET_SCHEMA["properties"] # type: ignore
@@ -206,6 +209,11 @@ class Preset:
     # to the QA-gated blended vocal output; 0.25 is the "on_conservative" default (~20-30% of the
     # full +/-3-5 cent drift range). The automatic breath blend-back has no user-facing control.
     humanizer_intensity: float = 0.25
+
+    # Stub for Counsel's Stage 3 (RVC/Seed-VC) optional timbral wet send, capped at 0-30% per
+    # spec. UI-only placeholder for now -- no inference/model loading is wired up anywhere in
+    # vocal_chain.py; this field currently does nothing.
+    voice_conversion_blend: float = 0.0
 
     def to_dict(self) -> dict:
         """Convert Preset to a dictionary and validate against JSON Schema."""

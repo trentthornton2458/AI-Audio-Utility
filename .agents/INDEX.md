@@ -1,7 +1,7 @@
 # Sauron AI Directions & Capability Index
 
 > **Source of Truth for Target Project:** Music Enhancer
-> **Last Updated:** 2026-07-26T07:45:57.106Z
+> **Last Updated:** 2026-07-26T07:50:11.021Z
 
 ---
 
@@ -126,9 +126,9 @@ None specified.
 - [x] **#7: Surface QA warnings as a caution badge in vocal_panel.py** [antigravity] (Commit: 89ce8a0)
 - [x] **#7: Milestone Review: Milestone 3: QA gate metric additions** [jules] (Commit: 1e5f047)
 - [x] **#8: Create factory reference asset loading + fallback logic** [claude] (Commit: b40eb34)
-- [x] **#9: First-run fallback modal for missing reference assets** [antigravity] 
+- [x] **#9: First-run fallback modal for missing reference assets** [antigravity] (Commit: a63f0a2)
 - [ ] **#10: Extend A/B compare UI with Raw / Humanized / Reference blind toggle** [antigravity] 
-- [ ] **#11: Add stubbed voice-conversion config field** [claude] 
+- [/] **#11: Add stubbed voice-conversion config field** [claude] 
 - [ ] **#12: Add disabled 'Coming Soon' RVC slider to vocal_panel.py** [antigravity] 
 - [ ] **#13: End-to-end pipeline test for Humanizer stage** [jules] 
 - [ ] **#14: Bug sweep across new Humanizer stage and UI** [jules] 
