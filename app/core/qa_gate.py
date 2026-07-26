@@ -23,6 +23,8 @@ from typing import Optional
 
 import numpy as np
 import soundfile as sf
+import torch
+import torchaudio
 
 from app.cache import get_logger
 from app.core import gemini_qa
@@ -37,6 +39,28 @@ logger = get_logger(__name__)
 MAX_ENHANCE_GAIN = 0.35
 
 _EPS = 1e-12
+
+# --- Warn-only signal-quality metrics (measure_pitch_variance / measure_high_frequency_energy /
+# measure_crest_factor below) -------------------------------------------------------------------
+# Independent of the deterministic enhance-blend gate above: these never reduce a blend gain or
+# block export, they only attach a QAMetricResult.warning flag for later UI surfacing.
+
+# torchaudio.functional.detect_pitch_frequency (NCF-based, already a project dependency -- see
+# pyproject.toml's torchaudio entry) has its own lag-quantization noise floor of a few cents even
+# on a perfectly flat pure tone, so the warning threshold sits above that floor rather than at 0.
+PITCH_FRAME_SECONDS = 0.01
+PITCH_FREQ_LOW_HZ = 80.0
+PITCH_FREQ_HIGH_HZ = 800.0
+PITCH_VOICED_RMS_FLOOR = 1e-3
+PITCH_VARIANCE_WARN_CENTS_MAX = 8.0
+
+HF_ENERGY_FRAME_SECONDS = 0.05
+HF_ENERGY_CUTOFF_HZ = 8000.0
+HF_ENERGY_WARN_RATIO_MAX = 0.01
+
+# Mirrors the common "DR value" loudness-war heuristic: sustained crest factor below ~6dB
+# indicates the signal has been brickwall-limited rather than left with natural peak headroom.
+CREST_FACTOR_WARN_DB_MIN = 6.0
 
 
 @dataclass
@@ -62,6 +86,17 @@ class QAGateResult:
     audio: np.ndarray
     samplerate: int
     qa_flags: list[QAWindowFlag] = field(default_factory=list)
+
+
+@dataclass
+class QAMetricResult:
+    """Result of one warn-only QA.measure_* signal-quality check: the raw metric value plus
+    whether it breached its warning threshold, and why. Unlike QAGateResult/QAWindowFlag above,
+    these never reduce a blend gain or block export -- they exist purely for UI surfacing."""
+
+    value: float
+    warning: bool
+    reason: str = ""
 
 
 def apply_qa_gated_blend(
@@ -179,6 +214,93 @@ def apply_qa_gated_blend(
     return QAGateResult(audio=out, samplerate=samplerate, qa_flags=qa_flags)
 
 
+def measure_pitch_variance(audio: np.ndarray, sample_rate: int) -> QAMetricResult:
+    """Standard deviation (in cents) of estimated pitch across voiced frames, via torchaudio's
+    NCF-based detect_pitch_frequency (already a project dependency, so no new pitch-tracking
+    library is needed). Frames are treated as voiced when their pitch estimate falls in-range
+    and their local RMS clears PITCH_VOICED_RMS_FLOOR. Warns when the variance is at/below
+    PITCH_VARIANCE_WARN_CENTS_MAX, i.e. the pitch is hard-quantized/flat rather than carrying a
+    human performance's natural micro-drift.
+    """
+    mono = _to_mono(audio)
+    if mono.size == 0:
+        return QAMetricResult(value=0.0, warning=True, reason="no_audio")
+
+    waveform = torch.from_numpy(mono.astype(np.float32)).unsqueeze(0)
+    pitch = (
+        torchaudio.functional.detect_pitch_frequency(
+            waveform,
+            sample_rate,
+            frame_time=PITCH_FRAME_SECONDS,
+            freq_low=int(PITCH_FREQ_LOW_HZ),
+            freq_high=int(PITCH_FREQ_HIGH_HZ),
+        )
+        .squeeze(0)
+        .numpy()
+    )
+
+    num_frames = pitch.shape[0]
+    if num_frames == 0:
+        return QAMetricResult(value=0.0, warning=True, reason="flat_or_hard_quantized_pitch")
+
+    # detect_pitch_frequency doesn't expose exact frame boundaries, so approximate them by
+    # dividing the signal evenly across the returned frame count -- fine for a coarse
+    # voiced/unvoiced amplitude gate.
+    segment_len = max(1, len(mono) // num_frames)
+    voiced = np.array(
+        [
+            pitch[i] > 0 and _rms(mono[i * segment_len : (i + 1) * segment_len]) >= PITCH_VOICED_RMS_FLOOR
+            for i in range(num_frames)
+        ]
+    )
+    voiced_pitch = pitch[voiced]
+    if voiced_pitch.size < 2:
+        return QAMetricResult(value=0.0, warning=True, reason="flat_or_hard_quantized_pitch")
+
+    cents = 1200.0 * np.log2(voiced_pitch / np.mean(voiced_pitch))
+    variance_cents = float(np.std(cents))
+    warning = variance_cents <= PITCH_VARIANCE_WARN_CENTS_MAX
+    return QAMetricResult(
+        value=variance_cents,
+        warning=warning,
+        reason="flat_or_hard_quantized_pitch" if warning else "",
+    )
+
+
+def measure_high_frequency_energy(
+    audio: np.ndarray, sample_rate: int, silence_threshold_db: float
+) -> QAMetricResult:
+    """Fraction of spectral energy at/above HF_ENERGY_CUTOFF_HZ within the audio's detected
+    non-vocal/breath sections (frames whose RMS level falls below silence_threshold_db dBFS).
+    Warns when that fraction is at/below HF_ENERGY_WARN_RATIO_MAX, i.e. breath/room detail has
+    been stripped from the quiet passages rather than merely denoised.
+    """
+    mono = _to_mono(audio)
+    frame_len = max(1, int(HF_ENERGY_FRAME_SECONDS * sample_rate))
+    breath_frames = [
+        mono[start : start + frame_len]
+        for start in range(0, len(mono), frame_len)
+        if 20.0 * np.log10(_rms(mono[start : start + frame_len]) + _EPS) < silence_threshold_db
+    ]
+    if not breath_frames:
+        return QAMetricResult(value=0.0, warning=False, reason="")
+
+    breath_audio = np.concatenate(breath_frames)
+    hf_ratio = _sibilance_energy_ratio(breath_audio, sample_rate, cutoff_hz=HF_ENERGY_CUTOFF_HZ)
+    warning = hf_ratio <= HF_ENERGY_WARN_RATIO_MAX
+    return QAMetricResult(value=hf_ratio, warning=warning, reason="stripped_breath_detail" if warning else "")
+
+
+def measure_crest_factor(audio: np.ndarray) -> QAMetricResult:
+    """Peak-to-RMS ratio in dB (see _crest_factor). Warns when the value is at/below
+    CREST_FACTOR_WARN_DB_MIN, indicating over-compression/brickwalling.
+    """
+    mono = _to_mono(audio)
+    crest_db = _crest_factor(mono)
+    warning = crest_db <= CREST_FACTOR_WARN_DB_MIN
+    return QAMetricResult(value=crest_db, warning=warning, reason="over_compressed" if warning else "")
+
+
 def _evaluate_window(metrics: dict, thresholds: QAGateThresholds, max_gain: float) -> tuple[float, Optional[str]]:
     """Derive (gain, reason) for one window from its metrics dict, starting at max_gain and
     applying soft proportional reductions per breached delta, then hard fail-safe overrides."""
@@ -276,6 +398,15 @@ def _sibilance_energy_ratio(x: np.ndarray, samplerate: int, cutoff_hz: float = 8
         return 0.0
     hf_energy = np.sum(magnitude[freqs >= cutoff_hz] ** 2)
     return float(hf_energy / total_energy)
+
+
+def _to_mono(audio: np.ndarray) -> np.ndarray:
+    """Collapse a (samples, channels) array to mono by averaging channels; passes 1-D arrays
+    through unchanged."""
+    audio = np.asarray(audio, dtype=np.float64)
+    if audio.ndim > 1:
+        return audio.mean(axis=1)
+    return audio
 
 
 def _rms(x: np.ndarray) -> float:

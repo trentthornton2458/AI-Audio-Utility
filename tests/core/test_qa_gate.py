@@ -263,3 +263,96 @@ def test_sibilance_energy_ratio_detects_high_frequency_content():
 
     assert low_ratio < 0.05
     assert high_ratio > 0.8
+
+
+# --- measure_pitch_variance ---------------------------------------------------------------
+
+
+def test_measure_pitch_variance_flags_pure_tone_as_flat_pitch():
+    sr = 22050
+    tone = _sine(220, sr, 1.0, amplitude=0.5)
+
+    result = qa_gate.measure_pitch_variance(tone, sr)
+
+    assert result.warning is True
+    assert result.reason == "flat_or_hard_quantized_pitch"
+    assert result.value < qa_gate.PITCH_VARIANCE_WARN_CENTS_MAX
+
+
+def test_measure_pitch_variance_does_not_flag_natural_vibrato():
+    sr = 22050
+    duration = 1.0
+    n = int(sr * duration)
+    t = np.arange(n) / sr
+
+    # +-50 cent, 5Hz vibrato -- well beyond the pitch tracker's own few-cent quantization noise
+    # floor (see PITCH_VARIANCE_WARN_CENTS_MAX's comment in qa_gate.py).
+    cents_mod = 50.0 * np.sin(2 * np.pi * 5 * t)
+    freq_inst = 220.0 * (2.0 ** (cents_mod / 1200.0))
+    phase = 2 * np.pi * np.cumsum(freq_inst) / sr
+    vibrato = (0.5 * np.sin(phase)).astype(np.float64)
+
+    result = qa_gate.measure_pitch_variance(vibrato, sr)
+
+    assert result.warning is False
+    assert result.reason == ""
+    assert result.value > qa_gate.PITCH_VARIANCE_WARN_CENTS_MAX
+
+
+# --- measure_high_frequency_energy -------------------------------------------------------
+
+
+def test_measure_high_frequency_energy_flags_silence_as_stripped_breath():
+    sr = 44100
+    silence = np.zeros(int(sr * 0.5), dtype=np.float64)
+
+    result = qa_gate.measure_high_frequency_energy(silence, sr, silence_threshold_db=-30.0)
+
+    assert result.warning is True
+    assert result.reason == "stripped_breath_detail"
+    assert result.value == pytest.approx(0.0)
+
+
+def test_measure_high_frequency_energy_does_not_flag_hissy_breath_section():
+    sr = 44100
+    rng = np.random.default_rng(2)
+    loud_vocal = _sine(220, sr, 0.5, amplitude=0.8)
+    # Quiet (well under the threshold), but HF-rich white noise -- a realistic breath/room-tone
+    # section that should NOT be flagged as stripped.
+    quiet_breath = (rng.uniform(-1.0, 1.0, size=int(sr * 0.5)) * 0.01).astype(np.float64)
+    audio = np.concatenate([loud_vocal, quiet_breath])
+
+    result = qa_gate.measure_high_frequency_energy(audio, sr, silence_threshold_db=-30.0)
+
+    assert result.warning is False
+    assert result.reason == ""
+    assert result.value > qa_gate.HF_ENERGY_WARN_RATIO_MAX
+
+
+# --- measure_crest_factor -----------------------------------------------------------------
+
+
+def test_measure_crest_factor_flags_brickwalled_waveform():
+    sr = 8000
+    t = np.linspace(0, 1.0, sr, endpoint=False)
+    sine = np.sin(2 * np.pi * 220 * t)
+    brickwalled = np.clip(sine * 20.0, -1.0, 1.0)  # hard-clipped into a near-square wave
+
+    result = qa_gate.measure_crest_factor(brickwalled)
+
+    assert result.warning is True
+    assert result.reason == "over_compressed"
+    assert result.value < qa_gate.CREST_FACTOR_WARN_DB_MIN
+
+
+def test_measure_crest_factor_does_not_flag_normal_dynamic_range():
+    sr = 8000
+    t = np.linspace(0, 1.0, sr, endpoint=False)
+    tone = 0.3 * np.sin(2 * np.pi * 220 * t)
+    tone[::50] = 0.95  # occasional peaks well above the sustained RMS level
+
+    result = qa_gate.measure_crest_factor(tone)
+
+    assert result.warning is False
+    assert result.reason == ""
+    assert result.value > qa_gate.CREST_FACTOR_WARN_DB_MIN
