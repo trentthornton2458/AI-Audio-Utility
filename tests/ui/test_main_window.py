@@ -23,13 +23,9 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent
 
 from app.core.ingestion import UnsupportedAudioFormatError
 from app.models.preset import Preset
-from app.ui.main_window import (
-    FileLoadPanel,
-    MainWindow,
-    StemSeparationPanel,
-)
-from app.ui.vocal_panel import VocalPanel
 from app.ui.instrumental_panel import InstrumentalPanel
+from app.ui.main_window import FileLoadPanel, MainWindow, StemSeparationPanel
+from app.ui.vocal_panel import VocalPanel
 
 
 def test_main_window_structure_and_title(qtbot):
@@ -146,10 +142,13 @@ def test_main_window_ingestion_failure(qtbot, tmp_path):
     invalid_file = tmp_path / "invalid.wav"
     invalid_file.touch()
 
-    with patch(
-        "app.ui.main_window.load_and_normalize_track",
-        side_effect=UnsupportedAudioFormatError("Unsupported sample format"),
-    ), patch("PySide6.QtWidgets.QMessageBox.critical") as mock_msgbox:
+    with (
+        patch(
+            "app.ui.main_window.load_and_normalize_track",
+            side_effect=UnsupportedAudioFormatError("Unsupported sample format"),
+        ),
+        patch("PySide6.QtWidgets.QMessageBox.critical") as mock_msgbox,
+    ):
         window.on_file_selected(invalid_file)
 
         mock_msgbox.assert_called_once()
@@ -236,9 +235,12 @@ def test_extract_stems_runs_separation_only_not_full_render(qtbot, tmp_path):
     mock_job = MagicMock()
     mock_job.isRunning.return_value = False
 
-    with patch("app.ui.main_window.SeparationJob", return_value=mock_job) as mock_sep_cls, patch(
-        "app.ui.main_window.RenderJob"
-    ) as mock_render_cls:
+    with (
+        patch(
+            "app.ui.main_window.SeparationJob", return_value=mock_job
+        ) as mock_sep_cls,
+        patch("app.ui.main_window.RenderJob") as mock_render_cls,
+    ):
         window.on_extract_stems_requested()
 
         mock_sep_cls.assert_called_once()
@@ -249,8 +251,11 @@ def test_extract_stems_runs_separation_only_not_full_render(qtbot, tmp_path):
     # Finished slot updates status and clears the active job
     vocal = tmp_path / "vocal.wav"
     instrumental = tmp_path / "instrumental.wav"
-    with patch("PySide6.QtWidgets.QMessageBox.information") as mock_info, patch(
-        "app.ui.main_window.gemini_settings.get_gemini_api_key", return_value=None
+    with (
+        patch("PySide6.QtWidgets.QMessageBox.information") as mock_info,
+        patch(
+            "app.ui.main_window.gemini_settings.get_gemini_api_key", return_value=None
+        ),
     ):
         window.on_separation_finished(vocal, instrumental)
         mock_info.assert_called_once()
@@ -266,9 +271,13 @@ def test_separation_finished_skips_analysis_without_api_key(qtbot, tmp_path):
     vocal = tmp_path / "vocal.wav"
     instrumental = tmp_path / "instrumental.wav"
 
-    with patch("PySide6.QtWidgets.QMessageBox.information"), patch(
-        "app.ui.main_window.gemini_settings.get_gemini_api_key", return_value=None
-    ), patch("app.ui.main_window.StemAnalysisJob") as mock_job_cls:
+    with (
+        patch("PySide6.QtWidgets.QMessageBox.information"),
+        patch(
+            "app.ui.main_window.gemini_settings.get_gemini_api_key", return_value=None
+        ),
+        patch("app.ui.main_window.StemAnalysisJob") as mock_job_cls,
+    ):
         window.on_separation_finished(vocal, instrumental)
 
         mock_job_cls.assert_not_called()
@@ -286,9 +295,16 @@ def test_separation_finished_starts_stem_analysis_with_api_key(qtbot, tmp_path):
     mock_job = MagicMock()
     mock_job.isRunning.return_value = False
 
-    with patch("PySide6.QtWidgets.QMessageBox.information"), patch(
-        "app.ui.main_window.gemini_settings.get_gemini_api_key", return_value="test-key"
-    ), patch("app.ui.main_window.StemAnalysisJob", return_value=mock_job) as mock_job_cls:
+    with (
+        patch("PySide6.QtWidgets.QMessageBox.information"),
+        patch(
+            "app.ui.main_window.gemini_settings.get_gemini_api_key",
+            return_value="test-key",
+        ),
+        patch(
+            "app.ui.main_window.StemAnalysisJob", return_value=mock_job
+        ) as mock_job_cls,
+    ):
         window.on_separation_finished(vocal, instrumental)
 
         mock_job_cls.assert_called_once_with(
@@ -328,7 +344,9 @@ def test_stem_analysis_finished_total_failure_keeps_existing_settings(qtbot, tmp
 
     before = window._vocal_panel.get_settings()
 
-    window.on_stem_analysis_finished({}, {}, ["Vocal stem analysis failed: network error"])
+    window.on_stem_analysis_finished(
+        {}, {}, ["Vocal stem analysis failed: network error"]
+    )
 
     after = window._vocal_panel.get_settings()
     assert before == after
@@ -355,9 +373,34 @@ def test_extract_stems_without_track_warns(qtbot):
     window = MainWindow(cache_manager=mock_cache)
     qtbot.addWidget(window)
 
-    with patch("app.ui.main_window.SeparationJob") as mock_sep_cls, patch(
-        "PySide6.QtWidgets.QMessageBox.warning"
-    ) as mock_warn:
+    with (
+        patch("app.ui.main_window.SeparationJob") as mock_sep_cls,
+        patch("PySide6.QtWidgets.QMessageBox.warning") as mock_warn,
+    ):
         window.on_extract_stems_requested()
         mock_warn.assert_called_once()
         mock_sep_cls.assert_not_called()
+
+
+def test_main_window_buttons_ux_and_accessibility(qtbot):
+    mock_cache = MagicMock()
+    window = MainWindow(cache_manager=mock_cache)
+    qtbot.addWidget(window)
+
+    # Check FileLoadPanel's Browse button
+    browse_btn = window._file_load_panel._browse_button
+    assert "Browse Audio File" in browse_btn.accessibleName()
+    assert "Suno audio file" in browse_btn.toolTip()
+    assert "Opens a file dialog" in browse_btn.accessibleDescription()
+
+    # Check StemSeparationPanel's Extract button
+    extract_btn = window._stem_separation_panel._extract_button
+    assert "Extract Stems" in extract_btn.accessibleName()
+    assert "Separate the loaded audio track" in extract_btn.toolTip()
+    assert "Splits the loaded" in extract_btn.accessibleDescription()
+
+    # Check MainWindow's Render button
+    render_btn = window._render_button
+    assert "Render and Master Track" in render_btn.accessibleName()
+    assert "Apply current vocal and instrumental settings" in render_btn.toolTip()
+    assert "Processes the stems" in render_btn.accessibleDescription()
