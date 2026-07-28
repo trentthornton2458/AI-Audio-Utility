@@ -31,8 +31,8 @@ def test_ab_compare_view_init(qtbot):
 
     assert isinstance(view._original_player, WaveformPlayerWidget)
     assert isinstance(view._cleaned_player, WaveformPlayerWidget)
-    assert view._original_player._title_label.text() == "<b>Original</b>"
-    assert view._cleaned_player._title_label.text() == "<b>Cleaned</b>"
+    assert view._original_player._title_label.text() == "<b>Option A</b>"
+    assert view._cleaned_player._title_label.text() == "<b>Option B</b>"
     assert view._sync_seek_cb.isChecked() is True
 
 
