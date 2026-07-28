@@ -15,7 +15,7 @@ from typing import Optional, Union
 import numpy as np
 import soundfile as sf
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QColor, QFont, QMouseEvent, QPaintEvent, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QMouseEvent, QPaintEvent, QPainter, QPen, QShortcut, QKeySequence
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
     QFrame,
@@ -354,6 +354,11 @@ class WaveformPlayerWidget(QWidget):
         self.setObjectName("WaveformPlayerWidget")
         self._init_ui()
         self._wire_signals()
+
+        # Setup shortcut for Play/Pause using Space key when the waveform canvas is focused
+        self._space_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Space), self._canvas)
+        self._space_shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+        self._space_shortcut.activated.connect(self.on_play_clicked)
 
     def _init_ui(self) -> None:
         main_layout = QVBoxLayout(self)

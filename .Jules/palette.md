@@ -1,3 +1,7 @@
 ## 2025-03-06 - Accessible Custom Painted Widgets in PySide6/Qt
 **Learning:** Custom drawn visual widgets (inheriting from `QWidget` and overriding `paintEvent`) are completely invisible to screen readers and keyboard navigation by default. They require manual activation of the focus policy (`Qt.FocusPolicy.StrongFocus`), customized drawing of focus indicators, and explicit assignment of screen-reader properties (`setAccessibleName`/`setAccessibleDescription`) to ensure proper accessibility.
 **Action:** For any custom-painted Qt widget with interactive features (scrubbing, seeking, dragging, etc.), always apply a strong focus policy, visual focus outlines in the painter, key event overrides (such as Arrow Keys for navigation), and full accessibility descriptions.
+
+## 2025-03-07 - Focused Shortcut Context in Multi-Player Layouts
+**Learning:** Adding general widget-scoped shortcuts (such as Space for Play/Pause) to a parent widget can lead to duplicate activation or conflicts when standard widgets (like focused `QPushButton`s) natively handle the same key. When multiple instances of the custom player widget exist on a single screen, global or broad shortcuts will collide.
+**Action:** Always scope interactive shortcuts to the specific interactive child element (e.g. the custom `WaveformCanvas` using `Qt.ShortcutContext.WidgetShortcut`) rather than the broader parent or window, letting other standard widgets retain their native behaviors gracefully.
