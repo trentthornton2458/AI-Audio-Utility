@@ -41,7 +41,9 @@ class GeminiAnalysisError(Exception):
     whatever preset values are already on the sliders."""
 
 
-def _extract_loudest_window(stem_path: Path, window_seconds: float = SNIPPET_SECONDS) -> tuple[np.ndarray, int]:
+def _extract_loudest_window(
+    stem_path: Path, window_seconds: float = SNIPPET_SECONDS
+) -> tuple[np.ndarray, int]:
     """Return (audio, samplerate) for the loudest `window_seconds` window of stem_path.
 
     Falls back to the whole file if it is shorter than window_seconds. "Loudest" is measured
@@ -74,7 +76,7 @@ def _wav_bytes(audio: np.ndarray, samplerate: int) -> bytes:
 
 
 def _clamp(key: str, value: float) -> float:
-    bounds: dict = _BOUNDS[key] # type: ignore
+    bounds: dict = _BOUNDS[key]  # type: ignore
     return max(bounds["minimum"], min(bounds["maximum"], float(value)))
 
 
@@ -103,11 +105,15 @@ def _call_gemini(
                 response_schema=schema,
             ),
         )
-    except Exception as exc:  # noqa: BLE001 - any SDK/network failure becomes GeminiAnalysisError
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - any SDK/network failure becomes GeminiAnalysisError
         raise GeminiAnalysisError(f"Gemini request failed: {exc}") from exc
 
     if response.parsed is None:
-        raise GeminiAnalysisError(f"Gemini returned no parsable JSON payload (raw text: {response.text!r})")
+        raise GeminiAnalysisError(
+            f"Gemini returned no parsable JSON payload (raw text: {response.text!r})"
+        )
 
     return response.parsed.model_dump()
 
@@ -220,7 +226,9 @@ def diagnose_qa_window(
     Returns (recommended_gain_multiplier clamped to [0.0, 1.0], verdict).
     """
     dsp_bytes = _wav_bytes(np.asarray(dsp_window_audio, dtype=np.float32), samplerate)
-    enhanced_bytes = _wav_bytes(np.asarray(enhanced_window_audio, dtype=np.float32), samplerate)
+    enhanced_bytes = _wav_bytes(
+        np.asarray(enhanced_window_audio, dtype=np.float32), samplerate
+    )
     prompt = _WINDOW_DIAGNOSTIC_PROMPT.format(stem_label=stem_label, reason=reason)
 
     client = genai.Client(api_key=api_key)
@@ -237,11 +245,15 @@ def diagnose_qa_window(
                 response_schema=_WindowDiagnosis,
             ),
         )
-    except Exception as exc:  # noqa: BLE001 - any SDK/network failure becomes GeminiAnalysisError
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - any SDK/network failure becomes GeminiAnalysisError
         raise GeminiAnalysisError(f"Gemini QA-window diagnostic failed: {exc}") from exc
 
     if response.parsed is None:
-        raise GeminiAnalysisError(f"Gemini returned no parsable JSON payload (raw text: {response.text!r})")
+        raise GeminiAnalysisError(
+            f"Gemini returned no parsable JSON payload (raw text: {response.text!r})"
+        )
 
     multiplier = max(0.0, min(1.0, float(response.parsed.recommended_gain_multiplier)))
     return multiplier, response.parsed.verdict
@@ -258,8 +270,12 @@ def analyze_vocal_stem(stem_path: Path, api_key: str) -> dict:
     result = _call_gemini(api_key, snippet_bytes, _VOCAL_PROMPT, _VocalAnalysis)
 
     return {
-        "vocal_denoise_intensity": _clamp("vocal_denoise_intensity", result["vocal_denoise_intensity"]),
-        "vocal_enhance_intensity": _clamp("vocal_enhance_intensity", result["vocal_enhance_intensity"]),
+        "vocal_denoise_intensity": _clamp(
+            "vocal_denoise_intensity", result["vocal_denoise_intensity"]
+        ),
+        "vocal_enhance_intensity": _clamp(
+            "vocal_enhance_intensity", result["vocal_enhance_intensity"]
+        ),
         "notch_depth_db": _clamp("notch_depth_db", result["notch_depth_db"]),
     }
 
@@ -273,7 +289,9 @@ def analyze_instrumental_stem(stem_path: Path, api_key: str) -> dict:
     """
     audio, samplerate = _extract_loudest_window(stem_path)
     snippet_bytes = _wav_bytes(audio, samplerate)
-    result = _call_gemini(api_key, snippet_bytes, _INSTRUMENTAL_PROMPT, _InstrumentalAnalysis)
+    result = _call_gemini(
+        api_key, snippet_bytes, _INSTRUMENTAL_PROMPT, _InstrumentalAnalysis
+    )
 
     return {
         "instrumental_denoise_intensity": _clamp(
@@ -282,7 +300,9 @@ def analyze_instrumental_stem(stem_path: Path, api_key: str) -> dict:
         "instrumental_enhance_intensity": _clamp(
             "instrumental_enhance_intensity", result["instrumental_enhance_intensity"]
         ),
-        "instrumental_mud_cut_hz": _clamp("instrumental_mud_cut_hz", result["instrumental_mud_cut_hz"]),
+        "instrumental_mud_cut_hz": _clamp(
+            "instrumental_mud_cut_hz", result["instrumental_mud_cut_hz"]
+        ),
         "instrumental_dehiss_gain_db": _clamp(
             "instrumental_dehiss_gain_db", result["instrumental_dehiss_gain_db"]
         ),

@@ -78,7 +78,9 @@ def _stem_path(directory: Path, key: str) -> Path:
     return directory / f"{key}{REFERENCE_STEM_FILENAME_SUFFIX}"
 
 
-def get_reference_stems(override_dir: Optional[Path] = None) -> dict[str, Optional[Path]]:
+def get_reference_stems(
+    override_dir: Optional[Path] = None,
+) -> dict[str, Optional[Path]]:
     """Return the 4 expected reference stem paths, keyed by REFERENCE_STEM_KEYS.
 
     Resolves against `override_dir` if given (pass
@@ -88,7 +90,11 @@ def get_reference_stems(override_dir: Optional[Path] = None) -> dict[str, Option
     on disk, else None, so callers can skip/disable that slot in the A/B UI instead of failing
     the whole comparison.
     """
-    effective_dir = override_dir if override_dir is not None else get_custom_reference_override_path()
+    effective_dir = (
+        override_dir
+        if override_dir is not None
+        else get_custom_reference_override_path()
+    )
     directory = effective_dir if effective_dir is not None else FACTORY_REFERENCES_DIR
     stems: dict[str, Optional[Path]] = {}
     for key in REFERENCE_STEM_KEYS:
@@ -122,8 +128,18 @@ def select_reference_stem(
         return None, None
 
     if vocal_metadata:
-        gender = str(vocal_metadata.get("gender") or vocal_metadata.get("vocal_gender") or "").lower().strip()
-        v_type = str(vocal_metadata.get("type") or vocal_metadata.get("vocal_type") or "").lower().strip()
+        gender = (
+            str(
+                vocal_metadata.get("gender") or vocal_metadata.get("vocal_gender") or ""
+            )
+            .lower()
+            .strip()
+        )
+        v_type = (
+            str(vocal_metadata.get("type") or vocal_metadata.get("vocal_type") or "")
+            .lower()
+            .strip()
+        )
 
         candidates: list[str] = []
         if gender and v_type:
@@ -150,5 +166,3 @@ def select_reference_stem(
             return key, path
 
     return None, None
-
-

@@ -20,12 +20,21 @@ def cache_mgr(tmp_path: Path) -> CacheManager:
     return CacheManager(config=AppConfig(cache_root=tmp_path / "cache"))
 
 
-def _write_stem(cache_mgr: CacheManager, track_id: str, filename: str, seconds: float = 0.1, sr: int = 8000) -> Path:
+def _write_stem(
+    cache_mgr: CacheManager,
+    track_id: str,
+    filename: str,
+    seconds: float = 0.1,
+    sr: int = 8000,
+) -> Path:
     stems_dir = cache_mgr.stems_dir(track_id)
     path = stems_dir / filename
-    audio = (0.3 * np.sin(2 * np.pi * 440 * np.linspace(0, seconds, int(sr * seconds), endpoint=False))).astype(
-        np.float64
-    )
+    audio = (
+        0.3
+        * np.sin(
+            2 * np.pi * 440 * np.linspace(0, seconds, int(sr * seconds), endpoint=False)
+        )
+    ).astype(np.float64)
     sf.write(str(path), audio, sr, subtype="PCM_24")
     return path
 
@@ -61,10 +70,14 @@ def test_hash_enhance_settings_changes_when_dsp_content_changes():
     assert neural_common._hash_enhance_settings(False, "content-hash-a") != a
 
 
-def test_run_denoise_pass_caches_and_skips_reprocessing(cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch):
+def test_run_denoise_pass_caches_and_skips_reprocessing(
+    cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
+):
     stem_path = _write_stem(cache_mgr, "track1", "vocal.wav")
     calls, denoise, enhance = _counting_denoise_enhance()
-    monkeypatch.setattr(neural_common, "_lazy_import_resemble_enhance", lambda: (denoise, enhance))
+    monkeypatch.setattr(
+        neural_common, "_lazy_import_resemble_enhance", lambda: (denoise, enhance)
+    )
 
     first = neural_common.run_denoise_pass(
         stem_path, True, 0.5, cache_mgr, "vocal_neural_", "vocal"
@@ -79,12 +92,18 @@ def test_run_denoise_pass_caches_and_skips_reprocessing(cache_mgr: CacheManager,
     assert calls["denoise"] == 1  # cache hit -- model not invoked again
 
 
-def test_run_denoise_pass_disabled_passes_through_unmodified(cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch):
+def test_run_denoise_pass_disabled_passes_through_unmodified(
+    cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
+):
     stem_path = _write_stem(cache_mgr, "track1", "vocal.wav")
     calls, denoise, enhance = _counting_denoise_enhance()
-    monkeypatch.setattr(neural_common, "_lazy_import_resemble_enhance", lambda: (denoise, enhance))
+    monkeypatch.setattr(
+        neural_common, "_lazy_import_resemble_enhance", lambda: (denoise, enhance)
+    )
 
-    output_path = neural_common.run_denoise_pass(stem_path, False, 0.5, cache_mgr, "vocal_neural_", "vocal")
+    output_path = neural_common.run_denoise_pass(
+        stem_path, False, 0.5, cache_mgr, "vocal_neural_", "vocal"
+    )
 
     assert calls["denoise"] == 0
     original_audio, _ = sf.read(str(stem_path))
@@ -92,12 +111,18 @@ def test_run_denoise_pass_disabled_passes_through_unmodified(cache_mgr: CacheMan
     np.testing.assert_allclose(written_audio, original_audio, atol=1e-4)
 
 
-def test_run_enhance_pass_passthrough_when_disabled(cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch):
+def test_run_enhance_pass_passthrough_when_disabled(
+    cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
+):
     dsp_path = _write_stem(cache_mgr, "track1", "vocal_dsp.wav")
     calls, denoise, enhance = _counting_denoise_enhance()
-    monkeypatch.setattr(neural_common, "_lazy_import_resemble_enhance", lambda: (denoise, enhance))
+    monkeypatch.setattr(
+        neural_common, "_lazy_import_resemble_enhance", lambda: (denoise, enhance)
+    )
 
-    result = neural_common.run_enhance_pass(dsp_path, False, cache_mgr, "vocal_neural_", "vocal")
+    result = neural_common.run_enhance_pass(
+        dsp_path, False, cache_mgr, "vocal_neural_", "vocal"
+    )
 
     assert result == dsp_path
     assert calls["enhance"] == 0
@@ -110,16 +135,22 @@ def test_run_enhance_pass_cache_invalidated_by_changed_dsp_input(
 ):
     dsp_path = _write_stem(cache_mgr, "track1", "vocal_dsp.wav")
     calls, denoise, enhance = _counting_denoise_enhance()
-    monkeypatch.setattr(neural_common, "_lazy_import_resemble_enhance", lambda: (denoise, enhance))
+    monkeypatch.setattr(
+        neural_common, "_lazy_import_resemble_enhance", lambda: (denoise, enhance)
+    )
 
-    first = neural_common.run_enhance_pass(dsp_path, True, cache_mgr, "vocal_neural_", "vocal")
+    first = neural_common.run_enhance_pass(
+        dsp_path, True, cache_mgr, "vocal_neural_", "vocal"
+    )
     assert calls["enhance"] == 1
 
     # Same settings, but the DSP output's content changed (e.g. a different notch/de-esser
     # parameter re-ran the DSP chain) -- the enhance cache key must track content, not just the
     # enhance_enabled toggle, so this must NOT be a cache hit.
     sf.write(str(dsp_path), _sine_array(0.05), 8000, subtype="PCM_24")
-    second = neural_common.run_enhance_pass(dsp_path, True, cache_mgr, "vocal_neural_", "vocal")
+    second = neural_common.run_enhance_pass(
+        dsp_path, True, cache_mgr, "vocal_neural_", "vocal"
+    )
 
     assert calls["enhance"] == 2
     assert second != first

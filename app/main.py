@@ -9,9 +9,9 @@ from __future__ import annotations
 import io
 import sys
 
-import app  # Ensures NullStream sys.stdout/sys.stderr fallback is active
 from PySide6.QtWidgets import QApplication, QDialog
 
+import app  # Ensures NullStream sys.stdout/sys.stderr fallback is active
 from app.cache import configure_logging, get_logger
 from app.cache.cache_manager import CacheManager
 from app.models.app_config import get_app_config
@@ -42,7 +42,9 @@ def main() -> None:
     configure_logging(cache_manager)
 
     if first_run:
-        logger.info("First run detected (no cache/models folder); launching setup wizard")
+        logger.info(
+            "First run detected (no cache/models folder); launching setup wizard"
+        )
         wizard = SetupWizard()
         if wizard.exec() != QDialog.DialogCode.Accepted:
             logger.info("Setup wizard was not completed; exiting")

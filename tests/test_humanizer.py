@@ -8,7 +8,9 @@ import pytest
 from app.core import humanizer
 
 
-def _fake_pitch_shift_window(window: np.ndarray, sample_rate: int, n_steps: float) -> np.ndarray:
+def _fake_pitch_shift_window(
+    window: np.ndarray, sample_rate: int, n_steps: float
+) -> np.ndarray:
     """Deterministic stand-in for pyrubberband's rubberband-CLI pitch shift.
 
     Reads the input waveform at `ratio = 2**(n_steps/12)` speed via linear interpolation --
@@ -29,7 +31,9 @@ def _fake_pitch_shift_window(window: np.ndarray, sample_rate: int, n_steps: floa
 
     if window.ndim == 1:
         return _resample_1d(window)
-    return np.stack([_resample_1d(window[:, c]) for c in range(window.shape[1])], axis=1)
+    return np.stack(
+        [_resample_1d(window[:, c]) for c in range(window.shape[1])], axis=1
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -40,7 +44,9 @@ def _stub_rubberband(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(humanizer, "_pitch_shift_window", _fake_pitch_shift_window)
 
 
-def _sine(freq: float, duration_s: float, sample_rate: int, channels: int = 1) -> np.ndarray:
+def _sine(
+    freq: float, duration_s: float, sample_rate: int, channels: int = 1
+) -> np.ndarray:
     t = np.arange(int(duration_s * sample_rate)) / sample_rate
     tone = (0.5 * np.sin(2 * np.pi * freq * t)).astype(np.float64)
     if channels == 1:
@@ -48,9 +54,12 @@ def _sine(freq: float, duration_s: float, sample_rate: int, channels: int = 1) -
     return np.repeat(tone[:, np.newaxis], channels, axis=1)
 
 
-def _estimate_frequency_track(audio: np.ndarray, sample_rate: int, block_ms: float = 20.0) -> np.ndarray:
+def _estimate_frequency_track(
+    audio: np.ndarray, sample_rate: int, block_ms: float = 20.0
+) -> np.ndarray:
     """Estimate instantaneous frequency per analysis block via sub-sample-interpolated
-    zero-crossing rate (fine enough to resolve single-digit-cent deviations at ~440Hz)."""
+    zero-crossing rate (fine enough to resolve single-digit-cent deviations at ~440Hz).
+    """
     block_size = int(sample_rate * block_ms / 1000.0)
     estimates = []
     for start in range(0, len(audio) - block_size, block_size):
@@ -99,7 +108,9 @@ def test_intensity_positive_produces_time_varying_pitch_deviation_in_expected_ra
     assert not np.array_equal(result, audio)
 
     freq_track = _estimate_frequency_track(result, sample_rate)
-    assert len(freq_track) > 8, "expected enough analysis blocks to observe drift over time"
+    assert (
+        len(freq_track) > 8
+    ), "expected enough analysis blocks to observe drift over time"
 
     # Time-varying: frequency estimate must actually fluctuate block-to-block, not sit flat.
     assert freq_track.std() > 0.15
@@ -160,20 +171,28 @@ def _hf_energy(audio: np.ndarray, sample_rate: int, cutoff_hz: float = 4000.0) -
     return float(np.sum(np.abs(spectrum[mask]) ** 2))
 
 
-def _make_vocal_with_breath_gap(sample_rate: int, duration_s: float) -> tuple[np.ndarray, slice]:
+def _make_vocal_with_breath_gap(
+    sample_rate: int, duration_s: float
+) -> tuple[np.ndarray, slice]:
     """A low-frequency "sung" tone with a silent gap in the middle, simulating a breath pause
     where BS-RoFormer would have stripped out breath/friction detail entirely."""
     num_samples = int(duration_s * sample_rate)
     t = np.arange(num_samples) / sample_rate
     tone = 0.4 * np.sin(2 * np.pi * 220.0 * t)
-    gap = slice(num_samples // 2 - int(0.05 * sample_rate), num_samples // 2 + int(0.05 * sample_rate))
+    gap = slice(
+        num_samples // 2 - int(0.05 * sample_rate),
+        num_samples // 2 + int(0.05 * sample_rate),
+    )
     tone[gap] = 0.0
     return tone, gap
 
 
-def _make_broadband_residual(sample_rate: int, duration_s: float, rng: np.random.Generator) -> np.ndarray:
+def _make_broadband_residual(
+    sample_rate: int, duration_s: float, rng: np.random.Generator
+) -> np.ndarray:
     """Broadband noise standing in for the real leftover breath/hiss residual: present across
-    the whole clip (including the vocal's silent/breath gap), unlike the vocal tone itself."""
+    the whole clip (including the vocal's silent/breath gap), unlike the vocal tone itself.
+    """
     num_samples = int(duration_s * sample_rate)
     return rng.normal(scale=0.5, size=num_samples)
 
@@ -227,7 +246,9 @@ def test_breath_blend_intensity_is_fixed_not_configurable():
 def test_breath_blend_handles_stereo_and_length_mismatch():
     sample_rate = 44100
     vocal = _sine(220.0, 0.3, sample_rate, channels=2)
-    residual = np.random.default_rng(1).normal(scale=0.3, size=(vocal.shape[0] - 100, 2))
+    residual = np.random.default_rng(1).normal(
+        scale=0.3, size=(vocal.shape[0] - 100, 2)
+    )
 
     result = humanizer.apply_breath_blend(vocal, residual, sample_rate)
 

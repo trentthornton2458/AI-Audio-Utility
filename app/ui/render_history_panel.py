@@ -15,17 +15,9 @@ from pathlib import Path
 from typing import Optional, Union
 
 from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QMessageBox,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QListWidget,
+                               QListWidgetItem, QMessageBox, QPushButton,
+                               QVBoxLayout, QWidget)
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
@@ -110,7 +102,9 @@ class RenderHistoryPanel(QWidget):
         # Status / Empty Label
         self._status_label = QLabel("No track loaded.")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._status_label.setStyleSheet("color: #8a8d9b; font-size: 12px; font-style: italic;")
+        self._status_label.setStyleSheet(
+            "color: #8a8d9b; font-size: 12px; font-style: italic;"
+        )
         main_layout.addWidget(self._status_label)
 
     def _wire_events(self) -> None:
@@ -153,10 +147,14 @@ class RenderHistoryPanel(QWidget):
             self._status_label.setVisible(True)
             return
 
-        wav_files = sorted(renders_dir.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
+        wav_files = sorted(
+            renders_dir.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True
+        )
 
         if not wav_files:
-            self._clear_cache_button.setEnabled(True)  # Track dir exists even if no renders yet
+            self._clear_cache_button.setEnabled(
+                True
+            )  # Track dir exists even if no renders yet
             self._status_label.setText("No renders found for this track.")
             self._status_label.setVisible(True)
             return
@@ -166,7 +164,9 @@ class RenderHistoryPanel(QWidget):
 
         for wav_path in wav_files:
             meta_path = wav_path.with_suffix(".json")
-            timestamp_str, summary_str = self._parse_render_metadata(wav_path, meta_path)
+            timestamp_str, summary_str = self._parse_render_metadata(
+                wav_path, meta_path
+            )
 
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, wav_path)
@@ -177,7 +177,9 @@ class RenderHistoryPanel(QWidget):
 
     # --- Private Helpers ---
 
-    def _parse_render_metadata(self, wav_path: Path, meta_path: Path) -> tuple[str, str]:
+    def _parse_render_metadata(
+        self, wav_path: Path, meta_path: Path
+    ) -> tuple[str, str]:
         """Extract formatted timestamp and settings summary from metadata JSON or fallback."""
         mtime = wav_path.stat().st_mtime
         fallback_time = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
@@ -223,7 +225,8 @@ class RenderHistoryPanel(QWidget):
 
     def _summarize_qa_flags(self, data: dict) -> str:
         """Summarize app.core.qa_gate.QAWindowFlag entries stored in a render's metadata JSON
-        (see app.workers.render_job._write_metadata) into a one-line, human-readable string."""
+        (see app.workers.render_job._write_metadata) into a one-line, human-readable string.
+        """
         qa_flags = data.get("qa_flags")
         if not qa_flags:
             return "QA: no auto-attenuation"
@@ -237,7 +240,9 @@ class RenderHistoryPanel(QWidget):
         for (stem_label, reason), count in counts.items():
             parts_by_stem.setdefault(stem_label, []).append(f"{reason} x{count}")
 
-        detail = "; ".join(f"{stem}: {', '.join(reasons)}" for stem, reasons in parts_by_stem.items())
+        detail = "; ".join(
+            f"{stem}: {', '.join(reasons)}" for stem, reasons in parts_by_stem.items()
+        )
         return f"QA: {len(qa_flags)} window(s) auto-attenuated ({detail})"
 
     # --- Event Slots ---
