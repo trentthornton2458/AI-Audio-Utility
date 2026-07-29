@@ -168,7 +168,10 @@ def test_vocal_panel_preset_loading_and_saving(qtbot, tmp_path):
         assert abs(loaded_settings.notch_depth_db - 3.5) < 1e-2
 
         # Test Save As... dialog
-        with patch("PySide6.QtWidgets.QInputDialog.getText", return_value=("saved_from_panel", True)):
+        with patch(
+            "PySide6.QtWidgets.QInputDialog.getText",
+            return_value=("saved_from_panel", True),
+        ):
             panel.on_save_preset_clicked()
 
         saved_preset = presets.load_preset("saved_from_panel", cache_mgr)
@@ -204,9 +207,13 @@ def test_vocal_panel_qa_badge_shows_on_warning_and_toggles_details(qtbot):
     from app.core.qa_gate import QAMetricResult
 
     qa_results = {
-        "pitch_variance": QAMetricResult(value=4.5, warning=True, reason="flat_or_hard_quantized_pitch"),
+        "pitch_variance": QAMetricResult(
+            value=4.5, warning=True, reason="flat_or_hard_quantized_pitch"
+        ),
         "hf_energy": QAMetricResult(value=0.05, warning=False, reason=""),
-        "crest_factor": QAMetricResult(value=5.0, warning=True, reason="over_compressed"),
+        "crest_factor": QAMetricResult(
+            value=5.0, warning=True, reason="over_compressed"
+        ),
     }
 
     panel.set_qa_metric_results(qa_results)
@@ -277,4 +284,3 @@ def test_vocal_panel_update_qa_from_file(qtbot, tmp_path):
     assert "pitch_variance" in res
     assert res["pitch_variance"].warning is True
     assert panel._qa_badge.isHidden() is False
-
