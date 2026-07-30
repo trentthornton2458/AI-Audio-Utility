@@ -1,6 +1,7 @@
 """Tests for stem mixing, LUFS mastering, and WAV export."""
 
 from pathlib import Path
+
 import numpy as np
 import pytest
 import soundfile as sf
@@ -13,11 +14,15 @@ def test_mix_stems_with_gain():
     instrumental = np.ones((100, 2), dtype=np.float64) * 0.5
 
     # 0dB gains -> simple sum (1.0)
-    mix_0db = mix_stems(vocal, instrumental, vocal_gain_db=0.0, instrumental_gain_db=0.0)
+    mix_0db = mix_stems(
+        vocal, instrumental, vocal_gain_db=0.0, instrumental_gain_db=0.0
+    )
     np.testing.assert_allclose(mix_0db, 1.0, atol=1e-5)
 
     # -6dB gain (~0.5 linear) for vocal, 0dB for instrumental -> 0.25 + 0.5 = 0.75
-    mix_gained = mix_stems(vocal, instrumental, vocal_gain_db=-6.0206, instrumental_gain_db=0.0)
+    mix_gained = mix_stems(
+        vocal, instrumental, vocal_gain_db=-6.0206, instrumental_gain_db=0.0
+    )
     np.testing.assert_allclose(mix_gained, 0.75, atol=1e-3)
 
 

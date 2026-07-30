@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
+
 import jsonschema
 
 PRESET_SCHEMA = {
@@ -11,25 +12,45 @@ PRESET_SCHEMA = {
     "title": "Preset",
     "type": "object",
     "properties": {
-        "version": { "type": "string", "default": "2.0" },
-        "vocal_denoise_enabled": { "type": "boolean" },
-        "vocal_denoise_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
-        "vocal_enhance_enabled": { "type": "boolean" },
-        "vocal_enhance_intensity": { "type": "number", "minimum": 0.0, "maximum": 0.35 },
-        "vocal_gain_db": { "type": "number", "minimum": -24.0, "maximum": 24.0 },
-        "vocal_deesser_depth_db": { "type": "number", "minimum": -24.0, "maximum": 0.0 },
-        "instrumental_denoise_enabled": { "type": "boolean" },
-        "instrumental_denoise_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
-        "instrumental_enhance_enabled": { "type": "boolean" },
-        "instrumental_enhance_intensity": { "type": "number", "minimum": 0.0, "maximum": 0.35 },
-        "instrumental_mud_cut_hz": { "type": "number", "minimum": 20.0, "maximum": 120.0 },
-        "instrumental_dehiss_shelf_hz": { "type": "number", "minimum": 6000.0, "maximum": 16000.0 },
-        "instrumental_dehiss_gain_db": { "type": "number", "minimum": -6.0, "maximum": 0.0 },
-        "instrumental_gain_db": { "type": "number", "minimum": -24.0, "maximum": 24.0 },
-        "notch_depth_db": { "type": "number", "minimum": 3.0, "maximum": 6.0 },
-        "lufs_target": { "type": "number", "minimum": -30.0, "maximum": -5.0 },
-        "humanizer_intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
-        "voice_conversion_blend": { "type": "number", "minimum": 0.0, "maximum": 0.3 }
+        "version": {"type": "string", "default": "2.0"},
+        "vocal_denoise_enabled": {"type": "boolean"},
+        "vocal_denoise_intensity": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "vocal_enhance_enabled": {"type": "boolean"},
+        "vocal_enhance_intensity": {"type": "number", "minimum": 0.0, "maximum": 0.35},
+        "vocal_gain_db": {"type": "number", "minimum": -24.0, "maximum": 24.0},
+        "vocal_deesser_depth_db": {"type": "number", "minimum": -24.0, "maximum": 0.0},
+        "instrumental_denoise_enabled": {"type": "boolean"},
+        "instrumental_denoise_intensity": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+        },
+        "instrumental_enhance_enabled": {"type": "boolean"},
+        "instrumental_enhance_intensity": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 0.35,
+        },
+        "instrumental_mud_cut_hz": {
+            "type": "number",
+            "minimum": 20.0,
+            "maximum": 120.0,
+        },
+        "instrumental_dehiss_shelf_hz": {
+            "type": "number",
+            "minimum": 6000.0,
+            "maximum": 16000.0,
+        },
+        "instrumental_dehiss_gain_db": {
+            "type": "number",
+            "minimum": -6.0,
+            "maximum": 0.0,
+        },
+        "instrumental_gain_db": {"type": "number", "minimum": -24.0, "maximum": 24.0},
+        "notch_depth_db": {"type": "number", "minimum": 3.0, "maximum": 6.0},
+        "lufs_target": {"type": "number", "minimum": -30.0, "maximum": -5.0},
+        "humanizer_intensity": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "voice_conversion_blend": {"type": "number", "minimum": 0.0, "maximum": 0.3},
     },
     "required": [
         "version",
@@ -50,9 +71,9 @@ PRESET_SCHEMA = {
         "notch_depth_db",
         "lufs_target",
         "humanizer_intensity",
-        "voice_conversion_blend"
+        "voice_conversion_blend",
     ],
-    "additionalProperties": False
+    "additionalProperties": False,
 }
 
 
@@ -83,9 +104,13 @@ def _migrate_legacy_preset_dict(raw_data: dict) -> dict:
         migrated.pop(key, None)
 
     for key in _LEGACY_CAPPED_FIELDS:
-        new_max = PRESET_SCHEMA["properties"][key]["maximum"] # type: ignore
+        new_max = PRESET_SCHEMA["properties"][key]["maximum"]  # type: ignore
         val = migrated.get(key)
-        if isinstance(val, (int, float)) and not isinstance(val, bool) and val > new_max:
+        if (
+            isinstance(val, (int, float))
+            and not isinstance(val, bool)
+            and val > new_max
+        ):
             migrated[key] = new_max
 
     return migrated
@@ -126,7 +151,7 @@ def sanitize_preset_dict(raw_data: dict) -> tuple[dict, list[str]]:
         "voice_conversion_blend": 0.0,
     }
 
-    properties: dict = PRESET_SCHEMA["properties"] # type: ignore
+    properties: dict = PRESET_SCHEMA["properties"]  # type: ignore
 
     for key, spec in properties.items():
         if key not in raw_data:

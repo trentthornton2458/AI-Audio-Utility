@@ -69,7 +69,9 @@ def test_get_reference_stems_mixed_presence(tmp_path: Path):
         assert stems[key] is None
 
 
-def test_override_directory_takes_precedence_over_factory_directory(tmp_path: Path, monkeypatch):
+def test_override_directory_takes_precedence_over_factory_directory(
+    tmp_path: Path, monkeypatch
+):
     factory_dir = tmp_path / "factory"
     override_dir = tmp_path / "override"
     _touch_all_stems(factory_dir)
@@ -94,9 +96,12 @@ def test_no_override_falls_back_to_factory_directory(tmp_path: Path, monkeypatch
         assert stems[key] == factory_dir / f"{key}.wav"
 
 
-def test_override_only_partially_populated_does_not_fall_back_to_factory(tmp_path: Path, monkeypatch):
+def test_override_only_partially_populated_does_not_fall_back_to_factory(
+    tmp_path: Path, monkeypatch
+):
     """The override, once set, fully replaces the factory directory -- it is not merged with
-    it, so a file missing from the override stays missing even if the factory copy exists."""
+    it, so a file missing from the override stays missing even if the factory copy exists.
+    """
     factory_dir = tmp_path / "factory"
     override_dir = tmp_path / "override"
     _touch_all_stems(factory_dir)
