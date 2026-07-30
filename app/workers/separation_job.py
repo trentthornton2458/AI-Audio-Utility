@@ -55,7 +55,9 @@ class SeparationJob(QThread):
         try:
             self.stageChanged.emit("Normalizing")
             self.progressChanged.emit(0.0)
-            normalized_path = ingestion.load_and_normalize_track(self._input_path, self._cache_manager)
+            normalized_path = ingestion.load_and_normalize_track(
+                self._input_path, self._cache_manager
+            )
 
             if self.isInterruptionRequested():
                 logger.info("Separation job cancelled for %s", self._input_path)
@@ -64,7 +66,9 @@ class SeparationJob(QThread):
 
             self.stageChanged.emit("Separating")
             self.progressChanged.emit(0.2)
-            vocal_path, instrumental_path = separation.separate_stems(normalized_path, self._cache_manager)
+            vocal_path, instrumental_path = separation.separate_stems(
+                normalized_path, self._cache_manager
+            )
         except Exception as exc:  # noqa: BLE001 - surfaced to the UI via failed()
             logger.exception("Separation job failed for %s", self._input_path)
             self.failed.emit(str(exc))

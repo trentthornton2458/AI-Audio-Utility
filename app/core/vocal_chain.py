@@ -11,7 +11,8 @@ from typing import Callable, Optional
 
 import numpy as np
 import soundfile as sf
-from pedalboard import Compressor, HighpassFilter, LowpassFilter, Pedalboard, PeakFilter
+from pedalboard import (Compressor, HighpassFilter, LowpassFilter, PeakFilter,
+                        Pedalboard)
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
@@ -106,16 +107,22 @@ def apply_dsp_chain(
     (deesser_threshold_db clamped to [-24, 0]).
     """
     notch_depth_db = _clamp(notch_depth_db, NOTCH_DEPTH_MIN_DB, NOTCH_DEPTH_MAX_DB)
-    deesser_threshold_db = _clamp(deesser_threshold_db, DEESSER_THRESHOLD_MIN_DB, DEESSER_THRESHOLD_MAX_DB)
+    deesser_threshold_db = _clamp(
+        deesser_threshold_db, DEESSER_THRESHOLD_MIN_DB, DEESSER_THRESHOLD_MAX_DB
+    )
 
-    audio, samplerate = sf.read(str(denoised_vocal_path), always_2d=True, dtype="float32")
+    audio, samplerate = sf.read(
+        str(denoised_vocal_path), always_2d=True, dtype="float32"
+    )
     channels_first = audio.T
 
     tone_board = Pedalboard(
         [
             HighpassFilter(cutoff_frequency_hz=HPF_CUTOFF_HZ),
             LowpassFilter(cutoff_frequency_hz=LPF_CUTOFF_HZ),
-            PeakFilter(cutoff_frequency_hz=NOTCH_CENTER_HZ, gain_db=-notch_depth_db, q=NOTCH_Q),
+            PeakFilter(
+                cutoff_frequency_hz=NOTCH_CENTER_HZ, gain_db=-notch_depth_db, q=NOTCH_Q
+            ),
         ]
     )
     toned = tone_board(channels_first, samplerate)
@@ -132,7 +139,9 @@ def apply_dsp_chain(
     return out_path
 
 
-def _apply_deesser(channels_first_audio: np.ndarray, samplerate: int, threshold_db: float) -> np.ndarray:
+def _apply_deesser(
+    channels_first_audio: np.ndarray, samplerate: int, threshold_db: float
+) -> np.ndarray:
     """De-ess the 5-8kHz sibilant band via split-band compression.
 
     Pedalboard's Compressor has no external sidechain input, so the band-limited copy of the
@@ -223,11 +232,17 @@ def run_humanizer_pass(
     track_id = vocal_audio_path.parent.parent.name
     content_hash = CacheManager.compute_track_id(vocal_audio_path)
     settings_hash = _hash_humanizer_settings(humanizer_intensity, content_hash)
-    output_path = cache_manager.stems_dir(track_id) / f"{NEURAL_FILENAME_PREFIX}humanize_{settings_hash}.wav"
+    output_path = (
+        cache_manager.stems_dir(track_id)
+        / f"{NEURAL_FILENAME_PREFIX}humanize_{settings_hash}.wav"
+    )
 
     if cache_manager.verify_stem_wav(output_path):
         logger.info(
-            "Using cached humanizer pass for %s stem of track %s: %s", NEURAL_STEM_LABEL, track_id, output_path
+            "Using cached humanizer pass for %s stem of track %s: %s",
+            NEURAL_STEM_LABEL,
+            track_id,
+            output_path,
         )
         if progress_callback:
             progress_callback(1.0)
@@ -245,7 +260,9 @@ def run_humanizer_pass(
     if is_cancelled and is_cancelled():
         raise InterruptedError("Humanizer pass cancelled")
 
-    residual_audio, residual_samplerate = sf.read(str(residual_stem_path), always_2d=True, dtype="float64")
+    residual_audio, residual_samplerate = sf.read(
+        str(residual_stem_path), always_2d=True, dtype="float64"
+    )
     if residual_samplerate != samplerate:
         raise ValueError(
             f"Sample rate mismatch between vocal signal ({samplerate}Hz) "

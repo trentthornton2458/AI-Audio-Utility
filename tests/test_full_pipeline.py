@@ -26,9 +26,11 @@ import torch
 from app.cache.cache_manager import CacheManager
 from app.core import humanizer, separation
 from app.core.ingestion import load_and_normalize_track
-from app.core.instrumental_chain import InstrumentalEqParams, apply_dsp_chain as apply_inst_dsp
+from app.core.instrumental_chain import InstrumentalEqParams
+from app.core.instrumental_chain import apply_dsp_chain as apply_inst_dsp
 from app.core.remix_master import export_wav, master, mix_stems
-from app.core.vocal_chain import apply_dsp_chain as apply_vocal_dsp, blend_vocal
+from app.core.vocal_chain import apply_dsp_chain as apply_vocal_dsp
+from app.core.vocal_chain import blend_vocal
 from app.models.app_config import AppConfig
 from app.models.preset import Preset
 from app.workers.render_job import RenderJob
@@ -58,28 +60,42 @@ class MockSeparator:
 
         # Write 24-bit WAV files
         sf.write(str(self.output_dir / vocal_name), vocal_data, sr, subtype="PCM_24")
-        sf.write(str(self.output_dir / instrumental_name), instrumental_data, sr, subtype="PCM_24")
+        sf.write(
+            str(self.output_dir / instrumental_name),
+            instrumental_data,
+            sr,
+            subtype="PCM_24",
+        )
 
         return [vocal_name, instrumental_name]
 
 
-def mock_denoise(current: torch.Tensor, current_sr: int, device: torch.device) -> tuple[torch.Tensor, int]:
+def mock_denoise(
+    current: torch.Tensor, current_sr: int, device: torch.device
+) -> tuple[torch.Tensor, int]:
     """Fast mock of resemble-enhance denoise step returning non-zero scaled Tensor."""
     return current * 0.95, current_sr
 
 
-def mock_enhance(current: torch.Tensor, current_sr: int, device: torch.device) -> tuple[torch.Tensor, int]:
+def mock_enhance(
+    current: torch.Tensor, current_sr: int, device: torch.device
+) -> tuple[torch.Tensor, int]:
     """Fast mock of resemble-enhance enhance step returning non-zero scaled Tensor."""
     return current * 0.90, current_sr
 
 
-def mock_apply_pitch_drift(audio: np.ndarray, sample_rate: int, intensity: float) -> np.ndarray:
+def mock_apply_pitch_drift(
+    audio: np.ndarray, sample_rate: int, intensity: float
+) -> np.ndarray:
     """Fast mock of the Humanizer's pitch-drift stage, standing in for the real pyrubberband/
-    rubberband-CLI implementation, which needs a downloaded binary not present in this test env."""
+    rubberband-CLI implementation, which needs a downloaded binary not present in this test env.
+    """
     return audio * 0.99
 
 
-def mock_apply_breath_blend(processed_vocal: np.ndarray, residual_signal: np.ndarray, sample_rate: int) -> np.ndarray:
+def mock_apply_breath_blend(
+    processed_vocal: np.ndarray, residual_signal: np.ndarray, sample_rate: int
+) -> np.ndarray:
     """Fast mock of the Humanizer's breath blend-back stage."""
     return processed_vocal
 
@@ -117,7 +133,9 @@ def test_full_pipeline_end_to_end(tmp_path: Path):
     # 4. Vocal DSP & Blend (denoise -> DSP -> enhance -> QA-gated capped residual blend)
     preset = Preset(notch_depth_db=4.5, vocal_enhance_intensity=0.3)
     dsp_vocal = stems_dir / "vocal_dsp.wav"
-    apply_vocal_dsp(n_vocal, preset.notch_depth_db, preset.vocal_deesser_depth_db, dsp_vocal)
+    apply_vocal_dsp(
+        n_vocal, preset.notch_depth_db, preset.vocal_deesser_depth_db, dsp_vocal
+    )
 
     # Stand in for a real resemble-enhance pass with a simple synthetic "enhanced" variant of
     # the DSP output, since this lower-level test doesn't monkeypatch the neural model.
@@ -140,7 +158,9 @@ def test_full_pipeline_end_to_end(tmp_path: Path):
     inst_audio, read_sr = sf.read(str(dsp_inst), always_2d=True, dtype="float64")
 
     # 6. Remix & Master
-    mixed = mix_stems(vocal_blended, inst_audio, preset.vocal_gain_db, preset.instrumental_gain_db)
+    mixed = mix_stems(
+        vocal_blended, inst_audio, preset.vocal_gain_db, preset.instrumental_gain_db
+    )
     mastered = master(mixed, sr, preset.lufs_target)
 
     export_path = cache_mgr.renders_dir(track_id) / "final_master.wav"
@@ -189,7 +209,7 @@ def test_full_pipeline_via_render_job(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr(separation, "ensure_ffmpeg_in_path", lambda bin_dir: bin_dir)
     monkeypatch.setattr(
         "app.core.neural_common._lazy_import_resemble_enhance",
-        lambda: (mock_denoise, mock_enhance)
+        lambda: (mock_denoise, mock_enhance),
     )
     monkeypatch.setattr(humanizer, "apply_pitch_drift", mock_apply_pitch_drift)
     monkeypatch.setattr(humanizer, "apply_breath_blend", mock_apply_breath_blend)
@@ -219,9 +239,18 @@ def test_full_pipeline_via_render_job(tmp_path: Path, monkeypatch: pytest.Monkey
     assert exported_path.is_file(), f"Exported file does not exist: {exported_path}"
 
     # Verify that we transitioned through the expected stages
-    expected_stages = ["Normalizing", "Separating", "Denoising Vocal", "Denoising Instrumental", "Mixing", "Mastering"]
+    expected_stages = [
+        "Normalizing",
+        "Separating",
+        "Denoising Vocal",
+        "Denoising Instrumental",
+        "Mixing",
+        "Mastering",
+    ]
     for stage in expected_stages:
-        assert stage in visited_stages, f"Stage '{stage}' was not visited. Visited: {visited_stages}"
+        assert (
+            stage in visited_stages
+        ), f"Stage '{stage}' was not visited. Visited: {visited_stages}"
 
     # Verify that progress was tracked and is increasing
     assert len(progress_values) > 0
@@ -230,7 +259,9 @@ def test_full_pipeline_via_render_job(tmp_path: Path, monkeypatch: pytest.Monkey
     # Verify final exported WAV properties
     final_data, final_sr = sf.read(str(exported_path), always_2d=True)
     assert final_sr == sr, f"Sample rate mismatch: expected {sr}, got {final_sr}"
-    assert final_data.shape[1] == 2, f"Channels mismatch: expected stereo (2 channels), got {final_data.shape[1]}"
+    assert (
+        final_data.shape[1] == 2
+    ), f"Channels mismatch: expected stereo (2 channels), got {final_data.shape[1]}"
 
     # Ensure there is non-zero audio data
     assert np.any(final_data != 0), "Exported audio data is completely silent/zero"

@@ -15,17 +15,11 @@ from typing import Optional, Union
 import numpy as np
 import soundfile as sf
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QColor, QFont, QMouseEvent, QPaintEvent, QPainter, QPen
+from PySide6.QtGui import (QColor, QFont, QKeySequence, QMouseEvent, QPainter,
+                           QPaintEvent, QPen, QShortcut)
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PySide6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QSlider,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QPushButton,
+                               QSlider, QVBoxLayout, QWidget)
 
 from app.cache import get_logger
 
@@ -37,7 +31,7 @@ class WaveformData:
     """Dataclass holding computed peak and RMS envelope arrays and metadata."""
 
     peaks: np.ndarray  # 1D float array, values in [0.0, 1.0]
-    rms: np.ndarray    # 1D float array, values in [0.0, 1.0]
+    rms: np.ndarray  # 1D float array, values in [0.0, 1.0]
     duration_seconds: float
     sample_rate: int
     total_samples: int
@@ -148,6 +142,7 @@ class WaveformCanvas(QWidget):
     """Internal canvas widget rendering waveform peak/RMS envelopes and moving playhead."""
 
     seekRequested = Signal(int)  # Emits target position in ms
+    spacePressed = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -159,6 +154,10 @@ class WaveformCanvas(QWidget):
         self._playhead_position_ms: int = 0
         self._duration_ms: int = 0
         self._hover_x: Optional[int] = None
+
+        self._space_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
+        self._space_shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+        self._space_shortcut.activated.connect(self.spacePressed.emit)
 
     def set_waveform_data(self, data: Optional[WaveformData]) -> None:
         self._waveform_data = data
@@ -191,7 +190,9 @@ class WaveformCanvas(QWidget):
         if self._waveform_data is None or self._waveform_data.total_samples == 0:
             painter.setPen(QPen(QColor("#5a5d72")))
             painter.setFont(QFont("Segoe UI", 11))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "No Waveform Loaded")
+            painter.drawText(
+                self.rect(), Qt.AlignmentFlag.AlignCenter, "No Waveform Loaded"
+            )
             return
 
         center_y = height // 2
@@ -203,9 +204,13 @@ class WaveformCanvas(QWidget):
         rms = self._waveform_data.rms
         num_bins = len(peaks)
 
-        duration_ms = self._duration_ms or int(self._waveform_data.duration_seconds * 1000)
+        duration_ms = self._duration_ms or int(
+            self._waveform_data.duration_seconds * 1000
+        )
         playhead_ratio = (
-            min(1.0, max(0.0, self._playhead_position_ms / duration_ms)) if duration_ms > 0 else 0.0
+            min(1.0, max(0.0, self._playhead_position_ms / duration_ms))
+            if duration_ms > 0
+            else 0.0
         )
         playhead_x = int(playhead_ratio * width)
 
@@ -378,7 +383,9 @@ class WaveformPlayerWidget(QWidget):
         self._file_label.setStyleSheet("color: #8a8d9b; font-size: 11px;")
 
         self._time_label = QLabel("00:00 / 00:00")
-        self._time_label.setStyleSheet("color: #55efc4; font-weight: bold; font-size: 12px;")
+        self._time_label.setStyleSheet(
+            "color: #55efc4; font-weight: bold; font-size: 12px;"
+        )
 
         header_layout.addWidget(self._title_label)
         header_layout.addWidget(self._file_label)
@@ -389,6 +396,7 @@ class WaveformPlayerWidget(QWidget):
         # Canvas
         self._canvas = WaveformCanvas()
         self._canvas.seekRequested.connect(self.on_canvas_seek_requested)
+        self._canvas.spacePressed.connect(self.on_play_clicked)
         self._canvas.setToolTip(
             "Interactive Waveform Display\n"
             "• Click/drag to seek\n"
@@ -409,7 +417,9 @@ class WaveformPlayerWidget(QWidget):
         self._play_button.setEnabled(False)
         self._play_button.setToolTip("Play or pause playback (Space)")
         self._play_button.setAccessibleName("Play")
-        self._play_button.setAccessibleDescription("Starts or pauses playback of the audio track.")
+        self._play_button.setAccessibleDescription(
+            "Starts or pauses playback of the audio track."
+        )
         self._play_button.setStyleSheet(
             "QPushButton { background-color: #6c5ce7; color: white; font-weight: bold; border-radius: 4px; padding: 6px 14px; border: none; }"
             "QPushButton:hover { background-color: #7d6dfa; }"
@@ -423,7 +433,9 @@ class WaveformPlayerWidget(QWidget):
         self._stop_button.setEnabled(False)
         self._stop_button.setToolTip("Stop playback and reset to beginning")
         self._stop_button.setAccessibleName("Stop")
-        self._stop_button.setAccessibleDescription("Stops audio playback and returns the playhead to the beginning.")
+        self._stop_button.setAccessibleDescription(
+            "Stops audio playback and returns the playhead to the beginning."
+        )
         self._stop_button.setStyleSheet(
             "QPushButton { background-color: #3b3e54; color: white; font-weight: bold; border-radius: 4px; padding: 6px 12px; border: none; }"
             "QPushButton:hover { background-color: #4b4e69; }"
@@ -444,7 +456,9 @@ class WaveformPlayerWidget(QWidget):
         self._volume_slider.setFixedWidth(80)
         self._volume_slider.setToolTip("Adjust playback volume")
         self._volume_slider.setAccessibleName("Volume")
-        self._volume_slider.setAccessibleDescription("Controls the audio playback volume level.")
+        self._volume_slider.setAccessibleDescription(
+            "Controls the audio playback volume level."
+        )
         self._volume_slider.setStyleSheet(
             "QSlider::groove:horizontal { border: 1px solid #2d2f3d; height: 4px; background: #1a1b24; border-radius: 2px; }"
             "QSlider::sub-page:horizontal { background: #55efc4; border-radius: 2px; }"
@@ -459,14 +473,18 @@ class WaveformPlayerWidget(QWidget):
     def _wire_signals(self) -> None:
         self._media_player.positionChanged.connect(self.on_media_position_changed)
         self._media_player.durationChanged.connect(self.on_media_duration_changed)
-        self._media_player.playbackStateChanged.connect(self.on_media_playback_state_changed)
+        self._media_player.playbackStateChanged.connect(
+            self.on_media_playback_state_changed
+        )
 
     # --- Public API Methods ---
 
     def load_file(self, file_path: Union[Path, str]) -> None:
         """Load an audio file, compute waveform envelope, and configure player."""
         path = Path(file_path)
-        logger.info("Loading audio file into WaveformPlayerWidget (%s): %s", self._title, path)
+        logger.info(
+            "Loading audio file into WaveformPlayerWidget (%s): %s", self._title, path
+        )
 
         waveform_data = compute_waveform_data(path)
         self._current_file_path = path
@@ -555,7 +573,10 @@ class WaveformPlayerWidget(QWidget):
                 self._fade_timer.start(self._fade_interval_ms)
 
     def is_playing(self) -> bool:
-        return self._media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        return (
+            self._media_player.playbackState()
+            == QMediaPlayer.PlaybackState.PlayingState
+        )
 
     def get_duration(self) -> int:
         return self._duration_ms
@@ -624,7 +645,9 @@ class WaveformPlayerWidget(QWidget):
         self.durationChanged.emit(duration_ms)
 
     @Slot(QMediaPlayer.PlaybackState)
-    def on_media_playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
+    def on_media_playback_state_changed(
+        self, state: QMediaPlayer.PlaybackState
+    ) -> None:
         if state == QMediaPlayer.PlaybackState.PlayingState:
             self._play_button.setText("Pause")
             self._play_button.setToolTip("Pause playback (Space)")

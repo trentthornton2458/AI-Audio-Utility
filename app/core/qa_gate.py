@@ -92,7 +92,8 @@ class QAGateResult:
 class QAMetricResult:
     """Result of one warn-only QA.measure_* signal-quality check: the raw metric value plus
     whether it breached its warning threshold, and why. Unlike QAGateResult/QAWindowFlag above,
-    these never reduce a blend gain or block export -- they exist purely for UI surfacing."""
+    these never reduce a blend gain or block export -- they exist purely for UI surfacing.
+    """
 
     value: float
     warning: bool
@@ -118,7 +119,9 @@ def apply_qa_gated_blend(
     if max_gain <= 0.0 or enhanced_path == dsp_path:
         return QAGateResult(audio=dsp_audio, samplerate=dsp_samplerate, qa_flags=[])
 
-    enhanced_audio, enhanced_samplerate = sf.read(str(enhanced_path), always_2d=True, dtype="float64")
+    enhanced_audio, enhanced_samplerate = sf.read(
+        str(enhanced_path), always_2d=True, dtype="float64"
+    )
     if dsp_samplerate != enhanced_samplerate:
         raise ValueError(
             f"Sample rate mismatch between DSP signal ({dsp_samplerate}Hz) "
@@ -170,7 +173,12 @@ def apply_qa_gated_blend(
             if thresholds.gemini_diagnostics_enabled and gemini_api_key:
                 try:
                     multiplier, verdict = gemini_qa.diagnose_qa_window(
-                        dsp_window, enhanced_window, samplerate, gemini_api_key, stem_label, flag.reason
+                        dsp_window,
+                        enhanced_window,
+                        samplerate,
+                        gemini_api_key,
+                        stem_label,
+                        flag.reason,
                     )
                 except gemini_qa.GeminiAnalysisError as exc:
                     logger.warning(
@@ -193,18 +201,28 @@ def apply_qa_gated_blend(
 
     total_samples = length
     window_centers_arr = np.array(window_centers, dtype=np.float64)
-    gain_envelope = _build_envelope(window_centers_arr, np.array(window_gains, dtype=np.float64), total_samples)
+    gain_envelope = _build_envelope(
+        window_centers_arr, np.array(window_gains, dtype=np.float64), total_samples
+    )
 
     dsp_rms_windows = np.array(
-        [_rms(dsp_mono[s : min(s + window_frames, length)]) for s in starts], dtype=np.float64
+        [_rms(dsp_mono[s : min(s + window_frames, length)]) for s in starts],
+        dtype=np.float64,
     )
     enhanced_rms_windows = np.array(
-        [_rms(enhanced_mono[s : min(s + window_frames, length)]) for s in starts], dtype=np.float64
+        [_rms(enhanced_mono[s : min(s + window_frames, length)]) for s in starts],
+        dtype=np.float64,
     )
-    dsp_rms_envelope = _build_envelope(window_centers_arr, dsp_rms_windows, total_samples)
-    enhanced_rms_envelope = _build_envelope(window_centers_arr, enhanced_rms_windows, total_samples)
+    dsp_rms_envelope = _build_envelope(
+        window_centers_arr, dsp_rms_windows, total_samples
+    )
+    enhanced_rms_envelope = _build_envelope(
+        window_centers_arr, enhanced_rms_windows, total_samples
+    )
 
-    level_match_scale = dsp_rms_envelope / np.maximum(enhanced_rms_envelope, thresholds.silence_rms_floor)
+    level_match_scale = dsp_rms_envelope / np.maximum(
+        enhanced_rms_envelope, thresholds.silence_rms_floor
+    )
     level_match_scale = np.clip(level_match_scale, 0.1, 10.0)
 
     enhanced_level_matched = enhanced_audio * level_match_scale[:, None]
@@ -241,7 +259,9 @@ def measure_pitch_variance(audio: np.ndarray, sample_rate: int) -> QAMetricResul
 
     num_frames = pitch.shape[0]
     if num_frames == 0:
-        return QAMetricResult(value=0.0, warning=True, reason="flat_or_hard_quantized_pitch")
+        return QAMetricResult(
+            value=0.0, warning=True, reason="flat_or_hard_quantized_pitch"
+        )
 
     # detect_pitch_frequency doesn't expose exact frame boundaries, so approximate them by
     # dividing the signal evenly across the returned frame count -- fine for a coarse
@@ -249,13 +269,17 @@ def measure_pitch_variance(audio: np.ndarray, sample_rate: int) -> QAMetricResul
     segment_len = max(1, len(mono) // num_frames)
     voiced = np.array(
         [
-            pitch[i] > 0 and _rms(mono[i * segment_len : (i + 1) * segment_len]) >= PITCH_VOICED_RMS_FLOOR
+            pitch[i] > 0
+            and _rms(mono[i * segment_len : (i + 1) * segment_len])
+            >= PITCH_VOICED_RMS_FLOOR
             for i in range(num_frames)
         ]
     )
     voiced_pitch = pitch[voiced]
     if voiced_pitch.size < 2:
-        return QAMetricResult(value=0.0, warning=True, reason="flat_or_hard_quantized_pitch")
+        return QAMetricResult(
+            value=0.0, warning=True, reason="flat_or_hard_quantized_pitch"
+        )
 
     cents = 1200.0 * np.log2(voiced_pitch / np.mean(voiced_pitch))
     variance_cents = float(np.std(cents))
@@ -280,15 +304,22 @@ def measure_high_frequency_energy(
     breath_frames = [
         mono[start : start + frame_len]
         for start in range(0, len(mono), frame_len)
-        if 20.0 * np.log10(_rms(mono[start : start + frame_len]) + _EPS) < silence_threshold_db
+        if 20.0 * np.log10(_rms(mono[start : start + frame_len]) + _EPS)
+        < silence_threshold_db
     ]
     if not breath_frames:
         return QAMetricResult(value=0.0, warning=False, reason="")
 
     breath_audio = np.concatenate(breath_frames)
-    hf_ratio = _sibilance_energy_ratio(breath_audio, sample_rate, cutoff_hz=HF_ENERGY_CUTOFF_HZ)
+    hf_ratio = _sibilance_energy_ratio(
+        breath_audio, sample_rate, cutoff_hz=HF_ENERGY_CUTOFF_HZ
+    )
     warning = hf_ratio <= HF_ENERGY_WARN_RATIO_MAX
-    return QAMetricResult(value=hf_ratio, warning=warning, reason="stripped_breath_detail" if warning else "")
+    return QAMetricResult(
+        value=hf_ratio,
+        warning=warning,
+        reason="stripped_breath_detail" if warning else "",
+    )
 
 
 def measure_crest_factor(audio: np.ndarray) -> QAMetricResult:
@@ -298,21 +329,42 @@ def measure_crest_factor(audio: np.ndarray) -> QAMetricResult:
     mono = _to_mono(audio)
     crest_db = _crest_factor(mono)
     warning = crest_db <= CREST_FACTOR_WARN_DB_MIN
-    return QAMetricResult(value=crest_db, warning=warning, reason="over_compressed" if warning else "")
+    return QAMetricResult(
+        value=crest_db, warning=warning, reason="over_compressed" if warning else ""
+    )
 
 
-def _evaluate_window(metrics: dict, thresholds: QAGateThresholds, max_gain: float) -> tuple[float, Optional[str]]:
+def _evaluate_window(
+    metrics: dict, thresholds: QAGateThresholds, max_gain: float
+) -> tuple[float, Optional[str]]:
     """Derive (gain, reason) for one window from its metrics dict, starting at max_gain and
-    applying soft proportional reductions per breached delta, then hard fail-safe overrides."""
+    applying soft proportional reductions per breached delta, then hard fail-safe overrides.
+    """
     gain = max_gain
     worst_reason: Optional[str] = None
     worst_reduction = 1.0
 
     deltas = (
-        ("spectral_flatness_delta", abs(metrics["flatness_enh"] - metrics["flatness_dsp"]), thresholds.spectral_flatness_delta_max),
-        ("spectral_centroid_delta", abs(metrics["centroid_enh"] - metrics["centroid_dsp"]), thresholds.spectral_centroid_delta_hz_max),
-        ("crest_factor_delta", abs(metrics["crest_enh"] - metrics["crest_dsp"]), thresholds.crest_factor_delta_db_max),
-        ("sibilance_ratio_delta", abs(metrics["sibilance_enh"] - metrics["sibilance_dsp"]), thresholds.sibilance_ratio_delta_max),
+        (
+            "spectral_flatness_delta",
+            abs(metrics["flatness_enh"] - metrics["flatness_dsp"]),
+            thresholds.spectral_flatness_delta_max,
+        ),
+        (
+            "spectral_centroid_delta",
+            abs(metrics["centroid_enh"] - metrics["centroid_dsp"]),
+            thresholds.spectral_centroid_delta_hz_max,
+        ),
+        (
+            "crest_factor_delta",
+            abs(metrics["crest_enh"] - metrics["crest_dsp"]),
+            thresholds.crest_factor_delta_db_max,
+        ),
+        (
+            "sibilance_ratio_delta",
+            abs(metrics["sibilance_enh"] - metrics["sibilance_dsp"]),
+            thresholds.sibilance_ratio_delta_max,
+        ),
     )
     for name, delta, limit in deltas:
         if delta > limit and delta > 0:
@@ -323,17 +375,25 @@ def _evaluate_window(metrics: dict, thresholds: QAGateThresholds, max_gain: floa
                 worst_reason = name
 
     # Hard fail-safes override everything above.
-    if metrics["rms_dsp"] < thresholds.silence_rms_floor or metrics["rms_enh"] < thresholds.silence_rms_floor:
+    if (
+        metrics["rms_dsp"] < thresholds.silence_rms_floor
+        or metrics["rms_enh"] < thresholds.silence_rms_floor
+    ):
         return 0.0, "silence"
     if metrics["peak_enh"] >= thresholds.clipping_threshold:
         return 0.0, "clipping"
-    if metrics["flatness_dsp"] - metrics["flatness_enh"] > thresholds.hallucination_flatness_drop_max:
+    if (
+        metrics["flatness_dsp"] - metrics["flatness_enh"]
+        > thresholds.hallucination_flatness_drop_max
+    ):
         return 0.0, "hallucination_proxy"
 
     return gain, worst_reason
 
 
-def _window_metrics(dsp_window: np.ndarray, enhanced_window: np.ndarray, samplerate: int) -> dict:
+def _window_metrics(
+    dsp_window: np.ndarray, enhanced_window: np.ndarray, samplerate: int
+) -> dict:
     return {
         "flatness_dsp": _spectral_flatness(dsp_window, samplerate),
         "flatness_enh": _spectral_flatness(enhanced_window, samplerate),
@@ -345,7 +405,9 @@ def _window_metrics(dsp_window: np.ndarray, enhanced_window: np.ndarray, sampler
         "sibilance_enh": _sibilance_energy_ratio(enhanced_window, samplerate),
         "rms_dsp": _rms(dsp_window),
         "rms_enh": _rms(enhanced_window),
-        "peak_enh": float(np.max(np.abs(enhanced_window))) if enhanced_window.size else 0.0,
+        "peak_enh": (
+            float(np.max(np.abs(enhanced_window))) if enhanced_window.size else 0.0
+        ),
     }
 
 
@@ -387,7 +449,9 @@ def _crest_factor(x: np.ndarray) -> float:
     return float(20.0 * np.log10(peak / rms + _EPS))
 
 
-def _sibilance_energy_ratio(x: np.ndarray, samplerate: int, cutoff_hz: float = 8000.0) -> float:
+def _sibilance_energy_ratio(
+    x: np.ndarray, samplerate: int, cutoff_hz: float = 8000.0
+) -> float:
     """Fraction of spectral energy at or above cutoff_hz."""
     if x.size == 0:
         return 0.0
@@ -415,7 +479,9 @@ def _rms(x: np.ndarray) -> float:
     return float(np.sqrt(np.mean(x.astype(np.float64) ** 2)))
 
 
-def _build_envelope(window_center_samples: np.ndarray, window_values: np.ndarray, total_samples: int) -> np.ndarray:
+def _build_envelope(
+    window_center_samples: np.ndarray, window_values: np.ndarray, total_samples: int
+) -> np.ndarray:
     """Smooth per-sample envelope built via linear interpolation between window-center values,
     edge-extended outside the window-center range -- avoids zipper/click artifacts from a
     stepped per-window gain."""
