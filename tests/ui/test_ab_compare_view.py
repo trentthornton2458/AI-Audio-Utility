@@ -31,8 +31,8 @@ def test_ab_compare_view_init(qtbot):
 
     assert isinstance(view._original_player, WaveformPlayerWidget)
     assert isinstance(view._cleaned_player, WaveformPlayerWidget)
-    assert view._original_player._title_label.text() == "<b>Original</b>"
-    assert view._cleaned_player._title_label.text() == "<b>Cleaned</b>"
+    assert view._original_player._title_label.text() == "<b>Option A</b>"
+    assert view._cleaned_player._title_label.text() == "<b>Option B</b>"
     assert view._sync_seek_cb.isChecked() is True
 
 
@@ -142,7 +142,9 @@ def test_ab_compare_view_smooth_fading(qtbot, tmp_path):
     assert view._original_player._muted_state is True
 
     # Process events to allow timer ticks to run
-    qtbot.wait_until(lambda: view._original_player._audio_output.volume() == 0.0, timeout=1000)
+    qtbot.wait_until(
+        lambda: view._original_player._audio_output.volume() == 0.0, timeout=1000
+    )
     assert view._original_player._audio_output.isMuted() is True
 
 
@@ -176,6 +178,7 @@ def test_ab_compare_view_drift_synchronization(qtbot, tmp_path):
 
 def test_ab_compare_view_playback_state_synchronization(qtbot, tmp_path):
     from PySide6.QtMultimedia import QMediaPlayer
+
     view = ABCompareView()
     qtbot.addWidget(view)
 
