@@ -58,7 +58,9 @@ def _make_normalized(cache_manager, track_id: str = "trk") -> Path:
     return norm
 
 
-def test_separate_stems_renames_default_outputs_to_canonical(cache_manager, monkeypatch):
+def test_separate_stems_renames_default_outputs_to_canonical(
+    cache_manager, monkeypatch
+):
     monkeypatch.setattr(separation, "Separator", _FakeSeparator)
     monkeypatch.setattr(separation, "ensure_ffmpeg_in_path", lambda bin_dir: bin_dir)
     monkeypatch.setattr(separation.torch.cuda, "is_available", lambda: False)
@@ -116,13 +118,22 @@ class _SummingFakeSeparator(_FakeSeparator):
         original, samplerate = sf.read(audio_file_path, always_2d=True, dtype="float64")
         base = Path(audio_file_path).stem
         vocal_share = original * 0.5
-        instrumental_share = original * 0.3  # remaining 0.2 * original is the expected residual
+        instrumental_share = (
+            original * 0.3
+        )  # remaining 0.2 * original is the expected residual
         names = [
             f"{base}_(Instrumental)_model_bs_roformer.wav",
             f"{base}_(Vocals)_model_bs_roformer.wav",
         ]
-        sf.write(str(self._output_dir / names[0]), instrumental_share, samplerate, subtype="PCM_24")
-        sf.write(str(self._output_dir / names[1]), vocal_share, samplerate, subtype="PCM_24")
+        sf.write(
+            str(self._output_dir / names[0]),
+            instrumental_share,
+            samplerate,
+            subtype="PCM_24",
+        )
+        sf.write(
+            str(self._output_dir / names[1]), vocal_share, samplerate, subtype="PCM_24"
+        )
         return names
 
 
@@ -135,7 +146,9 @@ def _make_normalized_tone(cache_manager, track_id: str = "trk") -> Path:
     return norm
 
 
-def test_separate_stems_caches_residual_alongside_vocal_and_instrumental(cache_manager, monkeypatch):
+def test_separate_stems_caches_residual_alongside_vocal_and_instrumental(
+    cache_manager, monkeypatch
+):
     monkeypatch.setattr(separation, "Separator", _SummingFakeSeparator)
     monkeypatch.setattr(separation, "ensure_ffmpeg_in_path", lambda bin_dir: bin_dir)
     monkeypatch.setattr(separation.torch.cuda, "is_available", lambda: False)
@@ -154,9 +167,12 @@ def test_separate_stems_caches_residual_alongside_vocal_and_instrumental(cache_m
     assert np.allclose(residual, expected, atol=1e-3)
 
 
-def test_separate_stems_backfills_residual_for_pre_existing_stem_cache(cache_manager, monkeypatch):
+def test_separate_stems_backfills_residual_for_pre_existing_stem_cache(
+    cache_manager, monkeypatch
+):
     """A cache written before residual persistence existed (vocal/instrumental only) should
-    have its residual computed and written on the next call, without re-running separation."""
+    have its residual computed and written on the next call, without re-running separation.
+    """
     calls = {"n": 0}
 
     class _CountingSummingSeparator(_SummingFakeSeparator):

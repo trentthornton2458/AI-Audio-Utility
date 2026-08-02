@@ -4,7 +4,8 @@ instrumental chains (caching by settings hash, per-channel processing, dry/wet b
 Denoise and enhance are independently-cacheable stages, run at different points in the
 pipeline: denoise runs on the raw isolated stem (pre-DSP), while enhance runs on the
 DSP-processed stem (post-DSP, the last AI stage before app.core.qa_gate's capped blend) --
-see app/core/vocal_chain.py and app/core/instrumental_chain.py for how they're sequenced."""
+see app/core/vocal_chain.py and app/core/instrumental_chain.py for how they're sequenced.
+"""
 
 from __future__ import annotations
 
@@ -62,9 +63,11 @@ def _lazy_import_resemble_enhance():
         sys.modules["deepspeed.runtime.engine"] = runtime_engine_stub
         sys.modules["deepspeed.runtime.utils"] = runtime_utils_stub
 
-    from resemble_enhance.enhancer.inference import denoise, enhance  # noqa: F811
+    from resemble_enhance.enhancer.inference import (denoise,  # noqa: F811
+                                                     enhance)
 
     return denoise, enhance
+
 
 logger = get_logger(__name__)
 
@@ -101,10 +104,18 @@ def run_denoise_pass(
 
     track_id = stem_path.parent.parent.name
     settings_hash = _hash_denoise_settings(denoise_enabled, denoise_intensity)
-    output_path = cache_manager.stems_dir(track_id) / f"{filename_prefix}denoise_{settings_hash}.wav"
+    output_path = (
+        cache_manager.stems_dir(track_id)
+        / f"{filename_prefix}denoise_{settings_hash}.wav"
+    )
 
     if cache_manager.verify_stem_wav(output_path):
-        logger.info("Using cached denoise pass for %s stem of track %s: %s", stem_label, track_id, output_path)
+        logger.info(
+            "Using cached denoise pass for %s stem of track %s: %s",
+            stem_label,
+            track_id,
+            output_path,
+        )
         if progress_callback:
             progress_callback(1.0)
         return output_path
@@ -125,7 +136,11 @@ def run_denoise_pass(
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device.type == "cuda":
-        logger.info("CUDA available; running denoise pass on GPU for %s stem of track %s", stem_label, track_id)
+        logger.info(
+            "CUDA available; running denoise pass on GPU for %s stem of track %s",
+            stem_label,
+            track_id,
+        )
     else:
         logger.warning(
             "CUDA not available; falling back to CPU for denoise pass on %s stem of track %s (this will be slow)",
@@ -158,10 +173,19 @@ def run_denoise_pass(
         raise InterruptedError("Denoise pass cancelled")
 
     min_length = min(len(channel_audio) for channel_audio in processed_channels)
-    processed_audio = np.stack([channel_audio[:min_length] for channel_audio in processed_channels], axis=1)
+    processed_audio = np.stack(
+        [channel_audio[:min_length] for channel_audio in processed_channels], axis=1
+    )
 
-    sf.write(str(output_path), processed_audio, output_samplerate, subtype=NEURAL_SUBTYPE)
-    logger.info("Wrote denoise pass for %s stem of track %s -> %s", stem_label, track_id, output_path)
+    sf.write(
+        str(output_path), processed_audio, output_samplerate, subtype=NEURAL_SUBTYPE
+    )
+    logger.info(
+        "Wrote denoise pass for %s stem of track %s -> %s",
+        stem_label,
+        track_id,
+        output_path,
+    )
     if progress_callback:
         progress_callback(1.0)
     return output_path
@@ -196,7 +220,10 @@ def run_enhance_pass(
     invalidates this cache entry.
     """
     if not enhance_enabled:
-        logger.info("Neural enhance disabled for %s stem; skipping (using DSP output as-is)", stem_label)
+        logger.info(
+            "Neural enhance disabled for %s stem; skipping (using DSP output as-is)",
+            stem_label,
+        )
         return dsp_stem_path
 
     if is_cancelled and is_cancelled():
@@ -208,10 +235,18 @@ def run_enhance_pass(
     track_id = dsp_stem_path.parent.parent.name
     dsp_content_hash = CacheManager.compute_track_id(dsp_stem_path)
     settings_hash = _hash_enhance_settings(enhance_enabled, dsp_content_hash)
-    output_path = cache_manager.stems_dir(track_id) / f"{filename_prefix}enhance_{settings_hash}.wav"
+    output_path = (
+        cache_manager.stems_dir(track_id)
+        / f"{filename_prefix}enhance_{settings_hash}.wav"
+    )
 
     if cache_manager.verify_stem_wav(output_path):
-        logger.info("Using cached enhance pass for %s stem of track %s: %s", stem_label, track_id, output_path)
+        logger.info(
+            "Using cached enhance pass for %s stem of track %s: %s",
+            stem_label,
+            track_id,
+            output_path,
+        )
         if progress_callback:
             progress_callback(1.0)
         return output_path
@@ -220,7 +255,11 @@ def run_enhance_pass(
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device.type == "cuda":
-        logger.info("CUDA available; running enhance pass on GPU for %s stem of track %s", stem_label, track_id)
+        logger.info(
+            "CUDA available; running enhance pass on GPU for %s stem of track %s",
+            stem_label,
+            track_id,
+        )
     else:
         logger.warning(
             "CUDA not available; falling back to CPU for enhance pass on %s stem of track %s (this will be slow)",
@@ -228,7 +267,11 @@ def run_enhance_pass(
             track_id,
         )
 
-    logger.info("Running enhance pass for %s stem of track %s (full wet strength)", stem_label, track_id)
+    logger.info(
+        "Running enhance pass for %s stem of track %s (full wet strength)",
+        stem_label,
+        track_id,
+    )
 
     num_channels = audio.shape[1]
     processed_channels: list[np.ndarray] = []
@@ -236,7 +279,9 @@ def run_enhance_pass(
     for channel_index in range(num_channels):
         if is_cancelled and is_cancelled():
             raise InterruptedError("Enhance pass cancelled")
-        channel_audio, output_samplerate = _process_channel_enhance(audio[:, channel_index], samplerate, device)
+        channel_audio, output_samplerate = _process_channel_enhance(
+            audio[:, channel_index], samplerate, device
+        )
         processed_channels.append(channel_audio)
         if progress_callback:
             progress_callback(0.9 * (channel_index + 1) / num_channels)
@@ -245,10 +290,19 @@ def run_enhance_pass(
         raise InterruptedError("Enhance pass cancelled")
 
     min_length = min(len(channel_audio) for channel_audio in processed_channels)
-    processed_audio = np.stack([channel_audio[:min_length] for channel_audio in processed_channels], axis=1)
+    processed_audio = np.stack(
+        [channel_audio[:min_length] for channel_audio in processed_channels], axis=1
+    )
 
-    sf.write(str(output_path), processed_audio, output_samplerate, subtype=NEURAL_SUBTYPE)
-    logger.info("Wrote enhance pass for %s stem of track %s -> %s", stem_label, track_id, output_path)
+    sf.write(
+        str(output_path), processed_audio, output_samplerate, subtype=NEURAL_SUBTYPE
+    )
+    logger.info(
+        "Wrote enhance pass for %s stem of track %s -> %s",
+        stem_label,
+        track_id,
+        output_path,
+    )
     if progress_callback:
         progress_callback(1.0)
     return output_path
@@ -282,7 +336,8 @@ def _process_channel_enhance(
     device: torch.device,
 ) -> tuple[np.ndarray, int]:
     """Run resemble-enhance's enhance() on a single audio channel at full wet strength (no
-    blending -- the caller handles capped/residual blending against the DSP-processed input)."""
+    blending -- the caller handles capped/residual blending against the DSP-processed input).
+    """
     _denoise, enhance = _lazy_import_resemble_enhance()
 
     current = torch.from_numpy(channel).float()

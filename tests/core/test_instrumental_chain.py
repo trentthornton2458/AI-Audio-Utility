@@ -1,6 +1,7 @@
 """Tests for instrumental DSP chain."""
 
 from pathlib import Path
+
 import numpy as np
 import pytest
 import soundfile as sf
@@ -19,7 +20,9 @@ def test_apply_instrumental_dsp_chain(tmp_path: Path):
     sf.write(str(in_file), audio, sr, subtype="PCM_24")
 
     out_file = tmp_path / "inst_dsp.wav"
-    params = InstrumentalEqParams(mud_cut_hz=50.0, dehiss_shelf_hz=8000.0, dehiss_gain_db=-3.0)
+    params = InstrumentalEqParams(
+        mud_cut_hz=50.0, dehiss_shelf_hz=8000.0, dehiss_gain_db=-3.0
+    )
 
     res_path = apply_dsp_chain(in_file, params, out_file)
     assert res_path.is_file()

@@ -44,7 +44,6 @@ def pyinstaller_metadata_shim() -> None:
     importlib.metadata.version = _safe_version  # type: ignore[assignment]
 
 
-
 @contextlib.contextmanager
 def windows_posixpath_shim():
     """Temporarily alias pathlib.PosixPath to WindowsPath so POSIX-authored checkpoints/configs
