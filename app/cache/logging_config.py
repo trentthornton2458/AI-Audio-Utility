@@ -16,7 +16,9 @@ LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _configured = False
 
 
-def configure_logging(cache_manager: Optional[CacheManager] = None, level: int = logging.INFO) -> None:
+def configure_logging(
+    cache_manager: Optional[CacheManager] = None, level: int = logging.INFO
+) -> None:
     """Attach a rotating file handler (5MB x 3) to the root logger. Idempotent."""
     global _configured
     if _configured:

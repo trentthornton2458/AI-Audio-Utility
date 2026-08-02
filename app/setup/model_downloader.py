@@ -65,9 +65,7 @@ REQUIRED_MODEL_SPECS: tuple[ModelSpec, ...] = ()
 # REQUIRED_MODEL_SPECS above and installed under CacheManager.bin_dir rather than models_dir. It's
 # GPL-licensed, so it's fetched on demand here instead of bundled in the installer.
 RUBBERBAND_BIN_FILENAME = "rubberband.exe"
-RUBBERBAND_WINDOWS_URL = (
-    "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows/rubberband.exe"
-)
+RUBBERBAND_WINDOWS_URL = "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows/rubberband.exe"
 # TODO: pin to the real sha256 of the chosen release asset before shipping the Humanizer feature.
 RUBBERBAND_WINDOWS_SHA256 = "0" * 64
 
@@ -96,7 +94,9 @@ class ModelDownloader:
     def models_dir(self) -> Path:
         return self._models_dir
 
-    def download_required_models(self, progress_callback: Callable[[str, float], None]) -> None:
+    def download_required_models(
+        self, progress_callback: Callable[[str, float], None]
+    ) -> None:
         """Download (or reuse) every required model, reporting progress via progress_callback.
 
         progress_callback is invoked with (model_name, fraction_complete), fraction_complete
@@ -106,11 +106,17 @@ class ModelDownloader:
         for spec in REQUIRED_MODEL_SPECS:
             self._download_one(spec, progress_callback)
 
-    def _download_one(self, spec: ModelSpec, progress_callback: Callable[[str, float], None]) -> Path:
+    def _download_one(
+        self, spec: ModelSpec, progress_callback: Callable[[str, float], None]
+    ) -> Path:
         destination = self._models_dir / spec.filename
 
         if destination.is_file() and self._matches_checksum(destination, spec.sha256):
-            logger.info("Model %s already present and verified at %s; skipping download", spec.name, destination)
+            logger.info(
+                "Model %s already present and verified at %s; skipping download",
+                spec.name,
+                destination,
+            )
             progress_callback(spec.name, 1.0)
             return destination
 
@@ -146,10 +152,17 @@ class ModelDownloader:
         return destination
 
     def _stream_download(
-        self, spec: ModelSpec, tmp_path: Path, progress_callback: Callable[[str, float], None]
+        self,
+        spec: ModelSpec,
+        tmp_path: Path,
+        progress_callback: Callable[[str, float], None],
     ) -> None:
-        request = urllib.request.Request(spec.url, headers={"User-Agent": "MusicMasteryEnhancer/1.0"})
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        request = urllib.request.Request(
+            spec.url, headers={"User-Agent": "MusicMasteryEnhancer/1.0"}
+        )
+        with urllib.request.urlopen(
+            request, timeout=REQUEST_TIMEOUT_SECONDS
+        ) as response:
             total_bytes = self._content_length(response)
             downloaded_bytes = 0
 
@@ -160,7 +173,9 @@ class ModelDownloader:
                         break
                     out_file.write(chunk)
                     downloaded_bytes += len(chunk)
-                    progress_callback(spec.name, self._fraction(downloaded_bytes, total_bytes))
+                    progress_callback(
+                        spec.name, self._fraction(downloaded_bytes, total_bytes)
+                    )
 
     @staticmethod
     def _content_length(response) -> Optional[int]:
@@ -212,21 +227,32 @@ def download_rubberband_binary(
         if progress_callback:
             progress_callback(name, fraction)
 
-    if destination.is_file() and ModelDownloader._matches_checksum(destination, RUBBERBAND_WINDOWS_SHA256):
-        logger.info("Rubberband binary already present and verified at %s; skipping download", destination)
+    if destination.is_file() and ModelDownloader._matches_checksum(
+        destination, RUBBERBAND_WINDOWS_SHA256
+    ):
+        logger.info(
+            "Rubberband binary already present and verified at %s; skipping download",
+            destination,
+        )
         _report(1.0)
         return destination
 
     if is_cancelled and is_cancelled():
-        raise RubberbandDownloadError("cancelled before download started", retryable=True)
+        raise RubberbandDownloadError(
+            "cancelled before download started", retryable=True
+        )
 
     logger.info("Downloading rubberband binary from %s", RUBBERBAND_WINDOWS_URL)
     _report(0.0)
 
     tmp_path = destination.with_name(destination.name + PART_SUFFIX)
-    request = urllib.request.Request(RUBBERBAND_WINDOWS_URL, headers={"User-Agent": "MusicMasteryEnhancer/1.0"})
+    request = urllib.request.Request(
+        RUBBERBAND_WINDOWS_URL, headers={"User-Agent": "MusicMasteryEnhancer/1.0"}
+    )
     try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(
+            request, timeout=REQUEST_TIMEOUT_SECONDS
+        ) as response:
             total_bytes = ModelDownloader._content_length(response)
             downloaded_bytes = 0
             with open(tmp_path, "wb") as out_file:
@@ -241,13 +267,19 @@ def download_rubberband_binary(
                     _report(ModelDownloader._fraction(downloaded_bytes, total_bytes))
     except InterruptedError as exc:
         ModelDownloader._cleanup(tmp_path)
-        raise RubberbandDownloadError("cancelled during download", retryable=True) from exc
+        raise RubberbandDownloadError(
+            "cancelled during download", retryable=True
+        ) from exc
     except urllib.error.URLError as exc:
         ModelDownloader._cleanup(tmp_path)
-        raise RubberbandDownloadError(f"network error while downloading: {exc}", retryable=True) from exc
+        raise RubberbandDownloadError(
+            f"network error while downloading: {exc}", retryable=True
+        ) from exc
     except OSError as exc:
         ModelDownloader._cleanup(tmp_path)
-        raise RubberbandDownloadError(f"local I/O error while downloading: {exc}", retryable=True) from exc
+        raise RubberbandDownloadError(
+            f"local I/O error while downloading: {exc}", retryable=True
+        ) from exc
 
     if not ModelDownloader._matches_checksum(tmp_path, RUBBERBAND_WINDOWS_SHA256):
         ModelDownloader._cleanup(tmp_path)

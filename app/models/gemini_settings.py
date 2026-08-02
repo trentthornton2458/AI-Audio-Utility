@@ -26,7 +26,9 @@ def get_gemini_api_key() -> Optional[str]:
     try:
         key = keyring.get_password(SERVICE_NAME, USERNAME)
     except keyring.errors.KeyringError as exc:
-        logger.warning("Failed to read Gemini API key from OS credential store: %s", exc)
+        logger.warning(
+            "Failed to read Gemini API key from OS credential store: %s", exc
+        )
         return None
     return key or None
 

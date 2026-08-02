@@ -21,6 +21,7 @@ for mod_name in [
 import numpy as np
 import pytest
 import soundfile as sf
+
 from app.cache.cache_manager import CacheManager
 from app.core import qa_gate
 from app.models.app_config import AppConfig
@@ -50,15 +51,30 @@ def _patched_pipeline(tmp_path: Path, dummy_audio: np.ndarray):
             "app.core.ingestion.load_and_normalize_track",
             return_value=tmp_path / "cache" / "track123" / "input.wav",
         ),
-        patch("app.core.separation.separate_stems", return_value=(tmp_path / "vocal.wav", tmp_path / "inst.wav")),
-        patch("app.core.vocal_chain.run_denoise_pass", return_value=tmp_path / "n_vocal.wav"),
+        patch(
+            "app.core.separation.separate_stems",
+            return_value=(tmp_path / "vocal.wav", tmp_path / "inst.wav"),
+        ),
+        patch(
+            "app.core.vocal_chain.run_denoise_pass",
+            return_value=tmp_path / "n_vocal.wav",
+        ),
         patch("app.core.vocal_chain.apply_dsp_chain"),
-        patch("app.core.vocal_chain.run_enhance_pass", return_value=tmp_path / "e_vocal.wav"),
+        patch(
+            "app.core.vocal_chain.run_enhance_pass",
+            return_value=tmp_path / "e_vocal.wav",
+        ),
         patch("app.core.vocal_chain.blend_vocal", return_value=qa_result),
         patch("app.core.vocal_chain.run_humanizer_pass", return_value=humanized_path),
-        patch("app.core.instrumental_chain.run_denoise_pass", return_value=tmp_path / "n_inst.wav"),
+        patch(
+            "app.core.instrumental_chain.run_denoise_pass",
+            return_value=tmp_path / "n_inst.wav",
+        ),
         patch("app.core.instrumental_chain.apply_dsp_chain"),
-        patch("app.core.instrumental_chain.run_enhance_pass", return_value=tmp_path / "e_inst.wav"),
+        patch(
+            "app.core.instrumental_chain.run_enhance_pass",
+            return_value=tmp_path / "e_inst.wav",
+        ),
         patch("app.core.instrumental_chain.blend_instrumental", return_value=qa_result),
         patch("app.models.gemini_settings.get_gemini_api_key", return_value=None),
         patch("app.core.remix_master.mix_stems", return_value=dummy_audio),
@@ -128,7 +144,10 @@ def test_render_job_failure_signal(tmp_path: Path):
     failed_messages: list[str] = []
     job.failed.connect(lambda msg: failed_messages.append(msg))
 
-    with patch("app.core.ingestion.load_and_normalize_track", side_effect=ValueError("Corrupt WAV format")):
+    with patch(
+        "app.core.ingestion.load_and_normalize_track",
+        side_effect=ValueError("Corrupt WAV format"),
+    ):
         job.run()
 
     assert len(failed_messages) == 1
@@ -151,21 +170,43 @@ def test_render_job_progress_emission(tmp_path: Path):
     progress_vals: list[int] = []
     job.progressChanged.connect(progress_vals.append)
 
-    with patch("app.core.ingestion.load_and_normalize_track", return_value=tmp_path / "cache" / "track123" / "input.wav"), \
-         patch("app.core.separation.separate_stems", return_value=(tmp_path / "vocal.wav", tmp_path / "inst.wav")), \
-         patch("app.core.vocal_chain.run_denoise_pass", return_value=tmp_path / "n_vocal.wav") as mock_v_denoise, \
-         patch("app.core.vocal_chain.apply_dsp_chain"), \
-         patch("app.core.vocal_chain.run_enhance_pass", return_value=tmp_path / "e_vocal.wav") as mock_v_enhance, \
-         patch("app.core.vocal_chain.blend_vocal", return_value=qa_result), \
-         patch("app.core.vocal_chain.run_humanizer_pass", return_value=humanized_path) as mock_v_humanizer, \
-         patch("app.core.instrumental_chain.run_denoise_pass", return_value=tmp_path / "n_inst.wav") as mock_i_denoise, \
-         patch("app.core.instrumental_chain.apply_dsp_chain"), \
-         patch("app.core.instrumental_chain.run_enhance_pass", return_value=tmp_path / "e_inst.wav") as mock_i_enhance, \
-         patch("app.core.instrumental_chain.blend_instrumental", return_value=qa_result), \
-         patch("app.models.gemini_settings.get_gemini_api_key", return_value=None), \
-         patch("app.core.remix_master.mix_stems", return_value=dummy_audio), \
-         patch("app.core.remix_master.master", return_value=dummy_audio), \
-         patch("app.core.remix_master.export_wav", side_effect=lambda audio, sr, p: p):
+    with (
+        patch(
+            "app.core.ingestion.load_and_normalize_track",
+            return_value=tmp_path / "cache" / "track123" / "input.wav",
+        ),
+        patch(
+            "app.core.separation.separate_stems",
+            return_value=(tmp_path / "vocal.wav", tmp_path / "inst.wav"),
+        ),
+        patch(
+            "app.core.vocal_chain.run_denoise_pass",
+            return_value=tmp_path / "n_vocal.wav",
+        ) as mock_v_denoise,
+        patch("app.core.vocal_chain.apply_dsp_chain"),
+        patch(
+            "app.core.vocal_chain.run_enhance_pass",
+            return_value=tmp_path / "e_vocal.wav",
+        ) as mock_v_enhance,
+        patch("app.core.vocal_chain.blend_vocal", return_value=qa_result),
+        patch(
+            "app.core.vocal_chain.run_humanizer_pass", return_value=humanized_path
+        ) as mock_v_humanizer,
+        patch(
+            "app.core.instrumental_chain.run_denoise_pass",
+            return_value=tmp_path / "n_inst.wav",
+        ) as mock_i_denoise,
+        patch("app.core.instrumental_chain.apply_dsp_chain"),
+        patch(
+            "app.core.instrumental_chain.run_enhance_pass",
+            return_value=tmp_path / "e_inst.wav",
+        ) as mock_i_enhance,
+        patch("app.core.instrumental_chain.blend_instrumental", return_value=qa_result),
+        patch("app.models.gemini_settings.get_gemini_api_key", return_value=None),
+        patch("app.core.remix_master.mix_stems", return_value=dummy_audio),
+        patch("app.core.remix_master.master", return_value=dummy_audio),
+        patch("app.core.remix_master.export_wav", side_effect=lambda audio, sr, p: p),
+    ):
 
         output_path = job._render()
 
@@ -173,7 +214,13 @@ def test_render_job_progress_emission(tmp_path: Path):
         for i in range(len(progress_vals) - 1):
             assert progress_vals[i] <= progress_vals[i + 1]
 
-        for mock_pass in (mock_v_denoise, mock_v_enhance, mock_v_humanizer, mock_i_denoise, mock_i_enhance):
+        for mock_pass in (
+            mock_v_denoise,
+            mock_v_enhance,
+            mock_v_humanizer,
+            mock_i_denoise,
+            mock_i_enhance,
+        ):
             mock_pass.assert_called_once()
             assert "progress_callback" in mock_pass.call_args[1]
             assert "is_cancelled" in mock_pass.call_args[1]
@@ -181,7 +228,8 @@ def test_render_job_progress_emission(tmp_path: Path):
 
 def test_render_job_humanizer_runs_after_qa_blend_and_before_remix(tmp_path: Path):
     """The Humanizer stage must run strictly after vocal_chain.blend_vocal's QA-gated blend and
-    strictly before remix_master.mix_stems, which is the current hand-off point into remix/master."""
+    strictly before remix_master.mix_stems, which is the current hand-off point into remix/master.
+    """
     config = AppConfig(cache_root=tmp_path / "cache")
     cache_mgr = CacheManager(config=config)
 
@@ -208,21 +256,43 @@ def test_render_job_humanizer_runs_after_qa_blend_and_before_remix(tmp_path: Pat
         call_order.append("mix_stems")
         return dummy_audio
 
-    with patch("app.core.ingestion.load_and_normalize_track", return_value=tmp_path / "cache" / "track123" / "input.wav"), \
-         patch("app.core.separation.separate_stems", return_value=(tmp_path / "vocal.wav", tmp_path / "inst.wav")), \
-         patch("app.core.vocal_chain.run_denoise_pass", return_value=tmp_path / "n_vocal.wav"), \
-         patch("app.core.vocal_chain.apply_dsp_chain"), \
-         patch("app.core.vocal_chain.run_enhance_pass", return_value=tmp_path / "e_vocal.wav"), \
-         patch("app.core.vocal_chain.blend_vocal", side_effect=blend_vocal_side_effect), \
-         patch("app.core.vocal_chain.run_humanizer_pass", side_effect=humanizer_side_effect) as mock_humanizer, \
-         patch("app.core.instrumental_chain.run_denoise_pass", return_value=tmp_path / "n_inst.wav"), \
-         patch("app.core.instrumental_chain.apply_dsp_chain"), \
-         patch("app.core.instrumental_chain.run_enhance_pass", return_value=tmp_path / "e_inst.wav"), \
-         patch("app.core.instrumental_chain.blend_instrumental", return_value=qa_result), \
-         patch("app.models.gemini_settings.get_gemini_api_key", return_value=None), \
-         patch("app.core.remix_master.mix_stems", side_effect=mix_stems_side_effect), \
-         patch("app.core.remix_master.master", return_value=dummy_audio), \
-         patch("app.core.remix_master.export_wav", side_effect=lambda audio, sr, p: p):
+    with (
+        patch(
+            "app.core.ingestion.load_and_normalize_track",
+            return_value=tmp_path / "cache" / "track123" / "input.wav",
+        ),
+        patch(
+            "app.core.separation.separate_stems",
+            return_value=(tmp_path / "vocal.wav", tmp_path / "inst.wav"),
+        ),
+        patch(
+            "app.core.vocal_chain.run_denoise_pass",
+            return_value=tmp_path / "n_vocal.wav",
+        ),
+        patch("app.core.vocal_chain.apply_dsp_chain"),
+        patch(
+            "app.core.vocal_chain.run_enhance_pass",
+            return_value=tmp_path / "e_vocal.wav",
+        ),
+        patch("app.core.vocal_chain.blend_vocal", side_effect=blend_vocal_side_effect),
+        patch(
+            "app.core.vocal_chain.run_humanizer_pass", side_effect=humanizer_side_effect
+        ) as mock_humanizer,
+        patch(
+            "app.core.instrumental_chain.run_denoise_pass",
+            return_value=tmp_path / "n_inst.wav",
+        ),
+        patch("app.core.instrumental_chain.apply_dsp_chain"),
+        patch(
+            "app.core.instrumental_chain.run_enhance_pass",
+            return_value=tmp_path / "e_inst.wav",
+        ),
+        patch("app.core.instrumental_chain.blend_instrumental", return_value=qa_result),
+        patch("app.models.gemini_settings.get_gemini_api_key", return_value=None),
+        patch("app.core.remix_master.mix_stems", side_effect=mix_stems_side_effect),
+        patch("app.core.remix_master.master", return_value=dummy_audio),
+        patch("app.core.remix_master.export_wav", side_effect=lambda audio, sr, p: p),
+    ):
 
         job._render()
 
@@ -261,6 +331,7 @@ def test_render_job_cancellation_removes_partial_files(tmp_path: Path):
     job.cancelled.connect(lambda: cancelled_emitted.append(True))
 
     from app.workers.render_job import _JobCancelled
+
     with patch.object(job, "_render", side_effect=_JobCancelled):
         job.run()
 

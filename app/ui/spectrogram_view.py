@@ -76,7 +76,9 @@ def compute_spectrogram_data(
         try:
             data, sr = sf.read(str(path), always_2d=True, dtype="float32")
         except Exception as exc:
-            logger.error("Failed to read audio file for spectrogram: %s (%s)", path, exc)
+            logger.error(
+                "Failed to read audio file for spectrogram: %s (%s)", path, exc
+            )
             return _empty_spectrogram_data(sample_rate)
     elif isinstance(audio_source, np.ndarray):
         sr = sample_rate
@@ -178,12 +180,16 @@ class SpectrogramCanvas(QWidget):
         if self._data is None or self._data.magnitudes_db.size <= 1:
             painter.setPen(QColor("#5a5d72"))
             painter.setFont(QFont("Segoe UI", 11))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "No Spectrogram Available")
+            painter.drawText(
+                self.rect(), Qt.AlignmentFlag.AlignCenter, "No Spectrogram Available"
+            )
             return
 
         size = (self.width(), self.height())
         if self._cached_pixmap is None or self._cached_size != size:
-            self._cached_pixmap = render_spectrogram_pixmap(self._data, size[0], size[1])
+            self._cached_pixmap = render_spectrogram_pixmap(
+                self._data, size[0], size[1]
+            )
             self._cached_size = size
 
         painter.drawPixmap(0, 0, self._cached_pixmap)
@@ -232,10 +238,14 @@ class SpectrogramCompareWidget(QWidget):
         return frame, canvas
 
     def load_original(self, file_path: Union[Path, str]) -> None:
-        self._original_canvas.set_spectrogram_data(compute_spectrogram_data(Path(file_path)))
+        self._original_canvas.set_spectrogram_data(
+            compute_spectrogram_data(Path(file_path))
+        )
 
     def load_cleaned(self, file_path: Union[Path, str]) -> None:
-        self._cleaned_canvas.set_spectrogram_data(compute_spectrogram_data(Path(file_path)))
+        self._cleaned_canvas.set_spectrogram_data(
+            compute_spectrogram_data(Path(file_path))
+        )
 
     def clear(self) -> None:
         self._original_canvas.set_spectrogram_data(None)

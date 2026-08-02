@@ -44,7 +44,9 @@ def test_render_history_panel_init(qtbot, temp_cache_manager: CacheManager):
     assert panel._list_widget.count() == 0
 
 
-def test_render_history_panel_refresh_with_renders(qtbot, temp_cache_manager: CacheManager):
+def test_render_history_panel_refresh_with_renders(
+    qtbot, temp_cache_manager: CacheManager
+):
     panel = RenderHistoryPanel(cache_manager=temp_cache_manager)
     qtbot.addWidget(panel)
 
@@ -89,7 +91,9 @@ def test_render_history_panel_refresh_with_renders(qtbot, temp_cache_manager: Ca
     assert "render_20260722_120000.wav" in item.text()
     assert "2026-07-22 12:00:00" in item.text()
     assert "Vocal Enhance: 30%" in item.text()
-    assert "QA: 1 window(s) auto-attenuated (vocal: hallucination_proxy x1)" in item.text()
+    assert (
+        "QA: 1 window(s) auto-attenuated (vocal: hallucination_proxy x1)" in item.text()
+    )
     assert item.data(Qt.ItemDataRole.UserRole) == render_wav
 
 
@@ -110,7 +114,9 @@ def test_render_history_panel_selection_signal(qtbot, temp_cache_manager: CacheM
     assert blocker.args[0] == render_wav
 
 
-def test_render_history_panel_clear_cache_confirmed(qtbot, temp_cache_manager: CacheManager):
+def test_render_history_panel_clear_cache_confirmed(
+    qtbot, temp_cache_manager: CacheManager
+):
     panel = RenderHistoryPanel(cache_manager=temp_cache_manager)
     qtbot.addWidget(panel)
 
@@ -121,14 +127,19 @@ def test_render_history_panel_clear_cache_confirmed(qtbot, temp_cache_manager: C
     panel.set_track_id(track_id)
     assert panel._list_widget.count() == 1
 
-    with patch("PySide6.QtWidgets.QMessageBox.question", return_value=QMessageBox.StandardButton.Yes):
+    with patch(
+        "PySide6.QtWidgets.QMessageBox.question",
+        return_value=QMessageBox.StandardButton.Yes,
+    ):
         panel._clear_cache_button.click()
 
     assert not (renders_dir / "render_01.wav").exists()
     assert panel._list_widget.count() == 0
 
 
-def test_render_history_panel_clear_cache_rejected(qtbot, temp_cache_manager: CacheManager):
+def test_render_history_panel_clear_cache_rejected(
+    qtbot, temp_cache_manager: CacheManager
+):
     panel = RenderHistoryPanel(cache_manager=temp_cache_manager)
     qtbot.addWidget(panel)
 
@@ -139,7 +150,10 @@ def test_render_history_panel_clear_cache_rejected(qtbot, temp_cache_manager: Ca
     panel.set_track_id(track_id)
     assert panel._list_widget.count() == 1
 
-    with patch("PySide6.QtWidgets.QMessageBox.question", return_value=QMessageBox.StandardButton.No):
+    with patch(
+        "PySide6.QtWidgets.QMessageBox.question",
+        return_value=QMessageBox.StandardButton.No,
+    ):
         panel._clear_cache_button.click()
 
     assert renders_dir.exists()

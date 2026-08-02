@@ -20,33 +20,21 @@ from typing import Dict, Optional
 
 import torch
 from PySide6.QtCore import QObject, QThread, Signal, Slot
-from PySide6.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QProgressBar,
-    QPushButton,
-    QVBoxLayout,
-    QWizard,
-    QWizardPage,
-)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QFrame, QHBoxLayout,
+                               QLabel, QLineEdit, QProgressBar, QPushButton,
+                               QVBoxLayout, QWizard, QWizardPage)
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
 from app.models import gemini_settings
-from app.setup.model_downloader import (
-    REQUIRED_MODEL_SPECS,
-    RUBBERBAND_BIN_FILENAME,
-    ModelDownloader,
-    ModelDownloadError,
-    RubberbandDownloadError,
-    download_rubberband_binary,
-    get_rubberband_binary_path,
-)
-from app.setup.installer import run_diagnostics, get_system_ram_gb, check_cuda_dll, check_pyside6_plugins
+from app.setup.installer import (check_cuda_dll, check_pyside6_plugins,
+                                 get_system_ram_gb, run_diagnostics)
+from app.setup.model_downloader import (REQUIRED_MODEL_SPECS,
+                                        RUBBERBAND_BIN_FILENAME,
+                                        ModelDownloader, ModelDownloadError,
+                                        RubberbandDownloadError,
+                                        download_rubberband_binary,
+                                        get_rubberband_binary_path)
 
 logger = get_logger(__name__)
 
@@ -74,7 +62,9 @@ class ModelDownloadWorker(QThread):
             logger.info("Starting background download of required models")
             self._downloader.download_required_models(progress_callback=progress_cb)
         except ModelDownloadError as exc:
-            logger.warning("Model download failed: %s (retryable=%s)", exc.reason, exc.retryable)
+            logger.warning(
+                "Model download failed: %s (retryable=%s)", exc.reason, exc.retryable
+            )
             self.failed.emit(exc.reason, exc.retryable)
         except Exception as exc:
             logger.exception("Unexpected error during model download: %s", exc)
@@ -189,7 +179,11 @@ class HardwareCheckPage(QWizardPage):
 
         if cuda_available:
             try:
-                gpu_name = torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else "CUDA Device"
+                gpu_name = (
+                    torch.cuda.get_device_name(0)
+                    if torch.cuda.device_count() > 0
+                    else "CUDA Device"
+                )
             except Exception:
                 gpu_name = "CUDA Device"
             self._gpu_detected = True
@@ -262,7 +256,9 @@ class GeminiApiKeyPage(QWizardPage):
     def __init__(self, parent: Optional[QWizard] = None) -> None:
         super().__init__(parent)
         self.setTitle("AI Auto-Tune Setup")
-        self.setSubTitle("Connect a Gemini API key to enable AI-driven parameter tuning.")
+        self.setSubTitle(
+            "Connect a Gemini API key to enable AI-driven parameter tuning."
+        )
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -284,20 +280,35 @@ class GeminiApiKeyPage(QWizardPage):
         self._key_edit = QLineEdit()
         self._key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self._key_edit.setPlaceholderText("Paste your Gemini API key here")
+        self._key_edit.setToolTip(
+            "Your API key is stored securely in your OS credential store/keychain."
+        )
+        self._key_edit.setAccessibleName("Gemini API Key")
+        self._key_edit.setAccessibleDescription(
+            "Enter your Gemini API key here. It is stored securely on your local operating system keychain."
+        )
         self._key_edit.textChanged.connect(self._on_text_changed)
         key_row.addWidget(key_label)
         key_row.addWidget(self._key_edit, 1)
         layout.addLayout(key_row)
 
         self._show_key_cb = QCheckBox("Show key")
+        self._show_key_cb.setToolTip(
+            "Toggle API key visibility. Ensure no one is looking at your screen when showing the key."
+        )
+        self._show_key_cb.setAccessibleName("Show API Key")
+        self._show_key_cb.setAccessibleDescription(
+            "Check this box to reveal the API key characters on screen."
+        )
         self._show_key_cb.toggled.connect(self._on_show_toggled)
         layout.addWidget(self._show_key_cb)
 
         self._status_label = QLabel(
-            "Don't have a key? Create one for free at Google AI Studio, then paste it above."
+            "Don't have a key? Create one for free at <a href='https://aistudio.google.com/' style='color: #55efc4;'>Google AI Studio</a>, then paste it above."
         )
+        self._status_label.setOpenExternalLinks(True)
         self._status_label.setWordWrap(True)
-        self._status_label.setStyleSheet("color: #8a8d9b;")
+        self._status_label.setStyleSheet("color: #a0a5b5;")
         layout.addWidget(self._status_label)
 
         layout.addStretch()
@@ -310,7 +321,9 @@ class GeminiApiKeyPage(QWizardPage):
 
     @Slot(bool)
     def _on_show_toggled(self, checked: bool) -> None:
-        self._key_edit.setEchoMode(QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password)
+        self._key_edit.setEchoMode(
+            QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
+        )
 
     @Slot(str)
     def _on_text_changed(self, _text: str) -> None:
@@ -393,7 +406,9 @@ class ModelDownloadPage(QWizardPage):
         # Visible error state container
         self._error_frame = QFrame()
         self._error_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        self._error_frame.setStyleSheet("background-color: #ffebee; border: 1px solid #ef5350;")
+        self._error_frame.setStyleSheet(
+            "background-color: #ffebee; border: 1px solid #ef5350;"
+        )
         error_layout = QVBoxLayout(self._error_frame)
 
         self._error_label = QLabel()
@@ -476,7 +491,9 @@ class ModelDownloadPage(QWizardPage):
             pbar.setValue(100)
         self._overall_progress_bar.setValue(100)
 
-        self._status_label.setText("All required model weights downloaded and verified successfully!")
+        self._status_label.setText(
+            "All required model weights downloaded and verified successfully!"
+        )
         self._status_label.setStyleSheet("color: #2e7d32; font-weight: bold;")
         self._error_frame.setVisible(False)
 
@@ -496,7 +513,9 @@ class ModelDownloadPage(QWizardPage):
 
         self._is_complete = False
         self.completeChanged.emit()
-        logger.warning("ModelDownloadPage: Download failed (%s), retryable=%s", reason, retryable)
+        logger.warning(
+            "ModelDownloadPage: Download failed (%s), retryable=%s", reason, retryable
+        )
 
     @Slot()
     def on_retry_clicked(self) -> None:
@@ -511,12 +530,14 @@ class ModelDownloadPage(QWizardPage):
         if self._worker is not None and self._worker.isRunning():
             self._worker.quit()
             self._worker.wait()
-        
+
         for pbar in self._model_progress_bars.values():
             pbar.setValue(100)
         self._overall_progress_bar.setValue(100)
 
-        self._status_label.setText("Model download skipped. Models will be downloaded on first use.")
+        self._status_label.setText(
+            "Model download skipped. Models will be downloaded on first use."
+        )
         self._status_label.setStyleSheet("color: #f57f17; font-weight: bold;")
         self._error_frame.setVisible(False)
         self._skip_button.setEnabled(False)
@@ -538,9 +559,7 @@ class CompletionPage(QWizardPage):
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
 
-        congrats_label = QLabel(
-            "<b>Congratulations! First-run setup is complete.</b>"
-        )
+        congrats_label = QLabel("<b>Congratulations! First-run setup is complete.</b>")
         font = congrats_label.font()
         font.setPointSize(11)
         congrats_label.setFont(font)
@@ -619,10 +638,16 @@ class RubberbandDownloadWorker(QThread):
                 is_cancelled=self.is_cancelled,
             )
         except RubberbandDownloadError as exc:
-            logger.warning("Rubberband download failed: %s (retryable=%s)", exc.reason, exc.retryable)
+            logger.warning(
+                "Rubberband download failed: %s (retryable=%s)",
+                exc.reason,
+                exc.retryable,
+            )
             self.failed.emit(exc.reason, exc.retryable)
         except Exception as exc:
-            logger.exception("Unexpected error during Rubberband binary download: %s", exc)
+            logger.exception(
+                "Unexpected error during Rubberband binary download: %s", exc
+            )
             self.failed.emit(str(exc), True)
         else:
             logger.info("Rubberband binary download completed successfully")
@@ -639,7 +664,9 @@ class RubberbandDownloadPage(QWizardPage):
     ) -> None:
         super().__init__(parent)
         self.setTitle("Rubberband CLI Download")
-        self.setSubTitle("Downloading Rubberband CLI binary for pitch & time stretching...")
+        self.setSubTitle(
+            "Downloading Rubberband CLI binary for pitch & time stretching..."
+        )
 
         self._cache_manager = cache_manager
         self._worker: Optional[RubberbandDownloadWorker] = None
@@ -682,7 +709,9 @@ class RubberbandDownloadPage(QWizardPage):
         # Visible error state container
         self._error_frame = QFrame()
         self._error_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        self._error_frame.setStyleSheet("background-color: #ffebee; border: 1px solid #ef5350;")
+        self._error_frame.setStyleSheet(
+            "background-color: #ffebee; border: 1px solid #ef5350;"
+        )
         error_layout = QVBoxLayout(self._error_frame)
 
         self._error_label = QLabel()
@@ -735,7 +764,9 @@ class RubberbandDownloadPage(QWizardPage):
             self._worker.quit()
             self._worker.wait()
 
-        self._worker = RubberbandDownloadWorker(cache_manager=self._cache_manager, parent=self)
+        self._worker = RubberbandDownloadWorker(
+            cache_manager=self._cache_manager, parent=self
+        )
         self._worker.progress.connect(self.on_download_progress)
         self._worker.finished.connect(self.on_download_finished)
         self._worker.failed.connect(self.on_download_failed)
@@ -755,7 +786,9 @@ class RubberbandDownloadPage(QWizardPage):
         self._progress_bar.setValue(100)
         self._overall_progress_bar.setValue(100)
 
-        self._status_label.setText("Rubberband CLI binary downloaded and verified successfully!")
+        self._status_label.setText(
+            "Rubberband CLI binary downloaded and verified successfully!"
+        )
         self._status_label.setStyleSheet("color: #2e7d32; font-weight: bold;")
         self._error_frame.setVisible(False)
 
@@ -766,7 +799,9 @@ class RubberbandDownloadPage(QWizardPage):
     @Slot(str, bool)
     def on_download_failed(self, reason: str, retryable: bool) -> None:
         """Slot handling download failures and presenting the error state and Retry button."""
-        self._status_label.setText("Rubberband download failed. Please review error below.")
+        self._status_label.setText(
+            "Rubberband download failed. Please review error below."
+        )
         self._status_label.setStyleSheet("color: #c62828;")
 
         self._error_label.setText(f"Download Error: {reason}")
@@ -775,7 +810,11 @@ class RubberbandDownloadPage(QWizardPage):
 
         self._is_complete = False
         self.completeChanged.emit()
-        logger.warning("RubberbandDownloadPage: Download failed (%s), retryable=%s", reason, retryable)
+        logger.warning(
+            "RubberbandDownloadPage: Download failed (%s), retryable=%s",
+            reason,
+            retryable,
+        )
 
     @Slot()
     def on_retry_clicked(self) -> None:
@@ -795,7 +834,9 @@ class RubberbandDownloadPage(QWizardPage):
         self._progress_bar.setValue(100)
         self._overall_progress_bar.setValue(100)
 
-        self._status_label.setText("Rubberband CLI download skipped. Binary can be downloaded on demand later.")
+        self._status_label.setText(
+            "Rubberband CLI download skipped. Binary can be downloaded on demand later."
+        )
         self._status_label.setStyleSheet("color: #f57f17; font-weight: bold;")
         self._error_frame.setVisible(False)
         self._skip_button.setEnabled(False)
@@ -822,7 +863,9 @@ class SetupWizard(QWizard):
         self.hardware_page = HardwareCheckPage(self)
         self.gemini_api_key_page = GeminiApiKeyPage(self)
         self.download_page = ModelDownloadPage(downloader=downloader, parent=self)
-        self.rubberband_download_page = RubberbandDownloadPage(cache_manager=cache_manager, parent=self)
+        self.rubberband_download_page = RubberbandDownloadPage(
+            cache_manager=cache_manager, parent=self
+        )
         self.completion_page = CompletionPage(self)
 
         self.addPage(self.welcome_page)
