@@ -23,13 +23,9 @@ import soundfile as sf
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 
-from app.ui.waveform_player import (
-    WaveformCanvas,
-    WaveformData,
-    WaveformPlayerWidget,
-    compute_waveform_data,
-    format_time_ms,
-)
+from app.ui.waveform_player import (WaveformCanvas, WaveformData,
+                                    WaveformPlayerWidget,
+                                    compute_waveform_data, format_time_ms)
 
 
 def test_format_time_ms():
@@ -180,6 +176,7 @@ def test_waveform_canvas_interaction(qtbot):
 
 def test_waveform_canvas_keyboard_seeking(qtbot):
     from PySide6.QtGui import QKeyEvent
+
     canvas = WaveformCanvas()
     qtbot.addWidget(canvas)
     canvas.resize(200, 100)
@@ -192,28 +189,61 @@ def test_waveform_canvas_keyboard_seeking(qtbot):
 
     # Check key navigation (Right arrow key -> +5s -> 15s)
     with qtbot.waitSignal(canvas.seekRequested, timeout=1000) as blocker:
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.NoModifier
+        )
         canvas.keyPressEvent(event)
     assert blocker.args[0] == 15000
 
     # Check Left arrow key (Left arrow key -> -5s -> 5s)
     with qtbot.waitSignal(canvas.seekRequested, timeout=1000) as blocker:
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Left, Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_Left, Qt.KeyboardModifier.NoModifier
+        )
         canvas.keyPressEvent(event)
     assert blocker.args[0] == 5000
 
     # Check PageDown key (+15s -> 25s)
     with qtbot.waitSignal(canvas.seekRequested, timeout=1000) as blocker:
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_PageDown, Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_PageDown, Qt.KeyboardModifier.NoModifier
+        )
         canvas.keyPressEvent(event)
     assert blocker.args[0] == 25000
 
     # Check PageUp key (-15s -> 0s)
     canvas.set_playhead_position(10000)
     with qtbot.waitSignal(canvas.seekRequested, timeout=1000) as blocker:
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_PageUp, Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_PageUp, Qt.KeyboardModifier.NoModifier
+        )
         canvas.keyPressEvent(event)
     assert blocker.args[0] == 0
+
+    # Check Home key (-> 0ms)
+    canvas.set_playhead_position(15000)
+    with qtbot.waitSignal(canvas.seekRequested, timeout=1000) as blocker:
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_Home, Qt.KeyboardModifier.NoModifier
+        )
+        canvas.keyPressEvent(event)
+    assert blocker.args[0] == 0
+
+    # Check End key (-> 30000ms / duration)
+    canvas.set_playhead_position(5000)
+    with qtbot.waitSignal(canvas.seekRequested, timeout=1000) as blocker:
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_End, Qt.KeyboardModifier.NoModifier
+        )
+        canvas.keyPressEvent(event)
+    assert blocker.args[0] == 30000
+
+    # Check Space key (emits playPauseRequested)
+    with qtbot.waitSignal(canvas.playPauseRequested, timeout=1000):
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier
+        )
+        canvas.keyPressEvent(event)
 
 
 def test_waveform_player_widget_accessibility(qtbot):
