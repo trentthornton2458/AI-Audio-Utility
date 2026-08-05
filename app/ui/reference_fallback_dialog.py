@@ -13,29 +13,18 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import (
-    QDialog,
-    QFileDialog,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import (QDialog, QFileDialog, QFrame, QHBoxLayout,
+                               QLabel, QLineEdit, QMessageBox, QPushButton,
+                               QVBoxLayout, QWidget)
 
 from app.cache import get_logger
-from app.core.reference_assets import (
-    REFERENCE_STEM_KEYS,
-    get_custom_reference_override_path,
-    get_reference_stems,
-    has_seen_missing_reference_modal,
-    is_reference_assets_missing,
-    set_custom_reference_override_path,
-    set_seen_missing_reference_modal,
-)
+from app.core.reference_assets import (REFERENCE_STEM_KEYS,
+                                       get_custom_reference_override_path,
+                                       get_reference_stems,
+                                       has_seen_missing_reference_modal,
+                                       is_reference_assets_missing,
+                                       set_custom_reference_override_path,
+                                       set_seen_missing_reference_modal)
 
 logger = get_logger(__name__)
 
@@ -82,7 +71,9 @@ class ReferenceFallbackDialog(QDialog):
         # Folder Selection Card
         card = QFrame()
         card.setObjectName("FolderCard")
-        card.setStyleSheet("QFrame#FolderCard { background-color: #1e1f2b; border: 1px solid #2d2f3d; border-radius: 8px; padding: 14px; }")
+        card.setStyleSheet(
+            "QFrame#FolderCard { background-color: #1e1f2b; border: 1px solid #2d2f3d; border-radius: 8px; padding: 14px; }"
+        )
         card_layout = QVBoxLayout(card)
         card_layout.setSpacing(10)
 
@@ -93,7 +84,9 @@ class ReferenceFallbackDialog(QDialog):
         path_input_row.setSpacing(8)
 
         self._path_edit = QLineEdit()
-        self._path_edit.setPlaceholderText("Select directory containing reference .wav files...")
+        self._path_edit.setPlaceholderText(
+            "Select directory containing reference .wav files..."
+        )
         if self._selected_path:
             self._path_edit.setText(str(self._selected_path))
         self._path_edit.textChanged.connect(self._on_path_text_changed)
@@ -230,7 +223,9 @@ class ReferenceFallbackDialog(QDialog):
                 shutil.copy2(src, dest)
                 copied_count += 1
             except Exception as exc:
-                logger.warning("Failed to copy custom stem %s to %s: %s", src, dest, exc)
+                logger.warning(
+                    "Failed to copy custom stem %s to %s: %s", src, dest, exc
+                )
 
         logger.info("Uploaded %d reference stem files to %s", copied_count, target_dir)
         self._refresh_stem_status()
@@ -239,12 +234,18 @@ class ReferenceFallbackDialog(QDialog):
     def on_save_clicked(self) -> None:
         raw = self._path_edit.text().strip()
         if not raw:
-            QMessageBox.warning(self, "Invalid Directory", "Please select a custom reference stems directory.")
+            QMessageBox.warning(
+                self,
+                "Invalid Directory",
+                "Please select a custom reference stems directory.",
+            )
             return
 
         path = Path(raw)
         if not path.is_dir():
-            QMessageBox.warning(self, "Invalid Directory", f"The directory does not exist:\n{path}")
+            QMessageBox.warning(
+                self, "Invalid Directory", f"The directory does not exist:\n{path}"
+            )
             return
 
         set_custom_reference_override_path(path)
@@ -259,7 +260,11 @@ class ReferenceFallbackDialog(QDialog):
         self.reject()
 
     def get_selected_path(self) -> Optional[Path]:
-        return self._selected_path if (self._selected_path and self._selected_path.is_dir()) else None
+        return (
+            self._selected_path
+            if (self._selected_path and self._selected_path.is_dir())
+            else None
+        )
 
 
 def check_reference_assets_fallback(parent: Optional[QWidget] = None) -> Optional[Path]:
@@ -269,7 +274,9 @@ def check_reference_assets_fallback(parent: Optional[QWidget] = None) -> Optiona
     override path if configured, else None.
     """
     if is_reference_assets_missing() and not has_seen_missing_reference_modal():
-        logger.info("Default reference assets are missing; opening first-run fallback modal")
+        logger.info(
+            "Default reference assets are missing; opening first-run fallback modal"
+        )
         dialog = ReferenceFallbackDialog(parent=parent)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             override_path = dialog.get_selected_path()

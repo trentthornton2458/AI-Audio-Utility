@@ -49,13 +49,19 @@ class StemAnalysisJob(QThread):
         errors: list[str] = []
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            vocal_future = executor.submit(gemini_qa.analyze_vocal_stem, self._vocal_path, self._api_key)
+            vocal_future = executor.submit(
+                gemini_qa.analyze_vocal_stem, self._vocal_path, self._api_key
+            )
             instrumental_future = executor.submit(
-                gemini_qa.analyze_instrumental_stem, self._instrumental_path, self._api_key
+                gemini_qa.analyze_instrumental_stem,
+                self._instrumental_path,
+                self._api_key,
             )
 
             vocal_updates = self._resolve(vocal_future, "vocal", errors)
-            instrumental_updates = self._resolve(instrumental_future, "instrumental", errors)
+            instrumental_updates = self._resolve(
+                instrumental_future, "instrumental", errors
+            )
 
         logger.info(
             "Stem analysis finished (vocal_ok=%s, instrumental_ok=%s, errors=%s)",

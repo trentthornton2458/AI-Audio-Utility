@@ -56,4 +56,3 @@ if _no_console and os.name == "nt":
 from app.core.platform_compat import pyinstaller_metadata_shim  # noqa: E402
 
 pyinstaller_metadata_shim()
-
