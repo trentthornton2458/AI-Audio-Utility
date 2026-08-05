@@ -4,20 +4,18 @@ import hashlib
 import io
 from pathlib import Path
 from unittest.mock import patch
+
 import pytest
 
 from app.cache.cache_manager import CacheManager
 from app.models.app_config import AppConfig
-from app.setup.model_downloader import (
-    ModelDownloadError,
-    ModelDownloader,
-    ModelSpec,
-    RubberbandBinaryNotFoundError,
-    RubberbandDownloadError,
-    RUBBERBAND_BIN_FILENAME,
-    download_rubberband_binary,
-    get_rubberband_binary_path,
-)
+from app.setup.model_downloader import (RUBBERBAND_BIN_FILENAME,
+                                        ModelDownloader, ModelDownloadError,
+                                        ModelSpec,
+                                        RubberbandBinaryNotFoundError,
+                                        RubberbandDownloadError,
+                                        download_rubberband_binary,
+                                        get_rubberband_binary_path)
 
 
 def test_model_downloader_reuses_existing_valid_file(tmp_path: Path):
@@ -97,8 +95,10 @@ def test_download_rubberband_binary_reuses_existing_valid_file(tmp_path: Path):
 
     progress_reports = []
 
-    with patch("app.setup.model_downloader.RUBBERBAND_WINDOWS_SHA256", sha256), \
-         patch("urllib.request.urlopen") as mock_urlopen:
+    with (
+        patch("app.setup.model_downloader.RUBBERBAND_WINDOWS_SHA256", sha256),
+        patch("urllib.request.urlopen") as mock_urlopen,
+    ):
         result_path = download_rubberband_binary(
             cache_manager=cache_mgr,
             progress_callback=lambda name, p: progress_reports.append((name, p)),
@@ -116,8 +116,12 @@ def test_download_rubberband_binary_downloads_and_verifies(tmp_path: Path):
 
     progress_reports = []
 
-    with patch("app.setup.model_downloader.RUBBERBAND_WINDOWS_SHA256", sha256), \
-         patch("urllib.request.urlopen", return_value=_FakeHTTPResponse(dummy_content)) as mock_urlopen:
+    with (
+        patch("app.setup.model_downloader.RUBBERBAND_WINDOWS_SHA256", sha256),
+        patch(
+            "urllib.request.urlopen", return_value=_FakeHTTPResponse(dummy_content)
+        ) as mock_urlopen,
+    ):
         result_path = download_rubberband_binary(
             cache_manager=cache_mgr,
             progress_callback=lambda name, p: progress_reports.append((name, p)),
@@ -137,8 +141,10 @@ def test_download_rubberband_binary_checksum_mismatch_raises(tmp_path: Path):
     dummy_content = b"fake rubberband exe bytes"
     wrong_sha256 = "0" * 64
 
-    with patch("app.setup.model_downloader.RUBBERBAND_WINDOWS_SHA256", wrong_sha256), \
-         patch("urllib.request.urlopen", return_value=_FakeHTTPResponse(dummy_content)):
+    with (
+        patch("app.setup.model_downloader.RUBBERBAND_WINDOWS_SHA256", wrong_sha256),
+        patch("urllib.request.urlopen", return_value=_FakeHTTPResponse(dummy_content)),
+    ):
         with pytest.raises(RubberbandDownloadError):
             download_rubberband_binary(cache_manager=cache_mgr)
 
@@ -152,7 +158,9 @@ def test_download_rubberband_binary_respects_cancellation_before_start(tmp_path:
 
     with patch("urllib.request.urlopen") as mock_urlopen:
         with pytest.raises(RubberbandDownloadError):
-            download_rubberband_binary(cache_manager=cache_mgr, is_cancelled=lambda: True)
+            download_rubberband_binary(
+                cache_manager=cache_mgr, is_cancelled=lambda: True
+            )
 
     mock_urlopen.assert_not_called()
 

@@ -1,13 +1,15 @@
 """Tests for vocal Pedalboard DSP chain, blending, and the Humanizer pass."""
 
 from pathlib import Path
+
 import numpy as np
 import pytest
 import soundfile as sf
 
 from app.cache.cache_manager import CacheManager
 from app.core import qa_gate, vocal_chain
-from app.core.vocal_chain import apply_dsp_chain, blend_vocal, run_humanizer_pass, _clamp
+from app.core.vocal_chain import (_clamp, apply_dsp_chain, blend_vocal,
+                                  run_humanizer_pass)
 from app.models.app_config import AppConfig
 
 
@@ -22,14 +24,18 @@ def test_apply_dsp_chain(tmp_path: Path):
     duration = 0.2
     t = np.linspace(0, duration, int(sr * duration), endpoint=False)
     # Generate audio with low mid and sibilant high content
-    audio = (np.sin(2 * np.pi * 440 * t) + 0.5 * np.sin(2 * np.pi * 6000 * t))[:, np.newaxis]
+    audio = (np.sin(2 * np.pi * 440 * t) + 0.5 * np.sin(2 * np.pi * 6000 * t))[
+        :, np.newaxis
+    ]
     audio = np.repeat(audio, 2, axis=1)  # Stereo
 
     in_file = tmp_path / "vocal_in.wav"
     sf.write(str(in_file), audio, sr, subtype="PCM_24")
 
     out_file = tmp_path / "vocal_dsp.wav"
-    res_path = apply_dsp_chain(in_file, notch_depth_db=4.0, deesser_threshold_db=-6.0, out_path=out_file)
+    res_path = apply_dsp_chain(
+        in_file, notch_depth_db=4.0, deesser_threshold_db=-6.0, out_path=out_file
+    )
 
     assert res_path.is_file()
     out_data, out_sr = sf.read(str(out_file))
@@ -37,7 +43,9 @@ def test_apply_dsp_chain(tmp_path: Path):
     assert out_data.shape == audio.shape
 
 
-def _write_constant_wav(path: Path, value: float, samplerate: int, frames: int = 4410) -> np.ndarray:
+def _write_constant_wav(
+    path: Path, value: float, samplerate: int, frames: int = 4410
+) -> np.ndarray:
     audio = np.ones((frames, 2), dtype=np.float64) * value
     sf.write(str(path), audio, samplerate, subtype="PCM_24")
     return audio
@@ -48,7 +56,9 @@ def test_blend_vocal_zero_intensity_passes_through_dsp_signal(tmp_path: Path):
     dsp_audio = _write_constant_wav(tmp_path / "dsp.wav", 0.3, sr)
     _write_constant_wav(tmp_path / "enhanced.wav", 0.9, sr)
 
-    result = blend_vocal(tmp_path / "dsp.wav", tmp_path / "enhanced.wav", enhance_intensity=0.0)
+    result = blend_vocal(
+        tmp_path / "dsp.wav", tmp_path / "enhanced.wav", enhance_intensity=0.0
+    )
 
     assert isinstance(result, qa_gate.QAGateResult)
     assert result.samplerate == sr
@@ -114,11 +124,15 @@ def _stub_humanizer_functions(monkeypatch: pytest.MonkeyPatch, call_log: dict):
     call_log.setdefault("drift_intensities", [])
     call_log.setdefault("blend_calls", 0)
 
-    def fake_pitch_drift(audio: np.ndarray, sample_rate: int, intensity: float) -> np.ndarray:
+    def fake_pitch_drift(
+        audio: np.ndarray, sample_rate: int, intensity: float
+    ) -> np.ndarray:
         call_log["drift_intensities"].append(intensity)
         return audio + 0.1
 
-    def fake_breath_blend(processed_vocal: np.ndarray, residual_signal: np.ndarray, sample_rate: int) -> np.ndarray:
+    def fake_breath_blend(
+        processed_vocal: np.ndarray, residual_signal: np.ndarray, sample_rate: int
+    ) -> np.ndarray:
         call_log["blend_calls"] += 1
         return processed_vocal + 0.05
 
@@ -129,7 +143,9 @@ def _stub_humanizer_functions(monkeypatch: pytest.MonkeyPatch, call_log: dict):
 def test_run_humanizer_pass_applies_pitch_drift_then_breath_blend(
     cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
 ):
-    vocal_path, residual_path = _setup_humanizer_inputs(cache_mgr, "track_humanize", vocal_value=0.2)
+    vocal_path, residual_path = _setup_humanizer_inputs(
+        cache_mgr, "track_humanize", vocal_value=0.2
+    )
     call_log: dict = {}
     _stub_humanizer_functions(monkeypatch, call_log)
 
@@ -147,7 +163,9 @@ def test_run_humanizer_pass_applies_pitch_drift_then_breath_blend(
     np.testing.assert_allclose(result_audio, 0.2 + 0.1 + 0.05, atol=1e-3)
 
 
-def test_run_humanizer_pass_second_call_uses_cache(cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch):
+def test_run_humanizer_pass_second_call_uses_cache(
+    cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
+):
     vocal_path, residual_path = _setup_humanizer_inputs(cache_mgr, "track_cache_hit")
     call_log: dict = {}
     _stub_humanizer_functions(monkeypatch, call_log)
@@ -163,7 +181,9 @@ def test_run_humanizer_pass_second_call_uses_cache(cache_mgr: CacheManager, monk
 def test_run_humanizer_pass_cache_key_changes_with_intensity(
     cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
 ):
-    vocal_path, residual_path = _setup_humanizer_inputs(cache_mgr, "track_intensity_change")
+    vocal_path, residual_path = _setup_humanizer_inputs(
+        cache_mgr, "track_intensity_change"
+    )
     call_log: dict = {}
     _stub_humanizer_functions(monkeypatch, call_log)
 
@@ -177,7 +197,9 @@ def test_run_humanizer_pass_cache_key_changes_with_intensity(
 def test_run_humanizer_pass_cache_key_changes_with_input_content(
     cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
 ):
-    vocal_path, residual_path = _setup_humanizer_inputs(cache_mgr, "track_content_change", vocal_value=0.2)
+    vocal_path, residual_path = _setup_humanizer_inputs(
+        cache_mgr, "track_content_change", vocal_value=0.2
+    )
     call_log: dict = {}
     _stub_humanizer_functions(monkeypatch, call_log)
 
@@ -193,7 +215,9 @@ def test_run_humanizer_pass_cache_key_changes_with_input_content(
     assert call_log["blend_calls"] == 2
 
 
-def test_run_humanizer_pass_clamps_intensity_out_of_range(cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch):
+def test_run_humanizer_pass_clamps_intensity_out_of_range(
+    cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
+):
     vocal_path, residual_path = _setup_humanizer_inputs(cache_mgr, "track_clamp")
     call_log: dict = {}
     _stub_humanizer_functions(monkeypatch, call_log)
@@ -205,13 +229,21 @@ def test_run_humanizer_pass_clamps_intensity_out_of_range(cache_mgr: CacheManage
     assert call_log["drift_intensities"] == [1.0]
 
 
-def test_run_humanizer_pass_reports_progress(cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch):
+def test_run_humanizer_pass_reports_progress(
+    cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
+):
     vocal_path, residual_path = _setup_humanizer_inputs(cache_mgr, "track_progress")
     call_log: dict = {}
     _stub_humanizer_functions(monkeypatch, call_log)
 
     progress_values: list[float] = []
-    run_humanizer_pass(vocal_path, 0.4, residual_path, cache_mgr, progress_callback=progress_values.append)
+    run_humanizer_pass(
+        vocal_path,
+        0.4,
+        residual_path,
+        cache_mgr,
+        progress_callback=progress_values.append,
+    )
 
     assert progress_values[0] == 0.0
     assert progress_values[-1] == 1.0
@@ -221,7 +253,9 @@ def test_run_humanizer_pass_reports_progress(cache_mgr: CacheManager, monkeypatc
 def test_run_humanizer_pass_cache_hit_skips_humanizer_functions_and_still_reports_progress(
     cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
 ):
-    vocal_path, residual_path = _setup_humanizer_inputs(cache_mgr, "track_cache_progress")
+    vocal_path, residual_path = _setup_humanizer_inputs(
+        cache_mgr, "track_cache_progress"
+    )
     call_log: dict = {}
     _stub_humanizer_functions(monkeypatch, call_log)
 
@@ -229,18 +263,28 @@ def test_run_humanizer_pass_cache_hit_skips_humanizer_functions_and_still_report
     assert call_log["blend_calls"] == 1
 
     progress_values: list[float] = []
-    run_humanizer_pass(vocal_path, 0.4, residual_path, cache_mgr, progress_callback=progress_values.append)
+    run_humanizer_pass(
+        vocal_path,
+        0.4,
+        residual_path,
+        cache_mgr,
+        progress_callback=progress_values.append,
+    )
 
     assert call_log["blend_calls"] == 1
     assert progress_values == [0.0, 1.0]
 
 
-def test_run_humanizer_pass_respects_is_cancelled(cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch):
+def test_run_humanizer_pass_respects_is_cancelled(
+    cache_mgr: CacheManager, monkeypatch: pytest.MonkeyPatch
+):
     vocal_path, residual_path = _setup_humanizer_inputs(cache_mgr, "track_cancel")
     call_log: dict = {}
     _stub_humanizer_functions(monkeypatch, call_log)
 
     with pytest.raises(InterruptedError):
-        run_humanizer_pass(vocal_path, 0.4, residual_path, cache_mgr, is_cancelled=lambda: True)
+        run_humanizer_pass(
+            vocal_path, 0.4, residual_path, cache_mgr, is_cancelled=lambda: True
+        )
 
     assert call_log["blend_calls"] == 0

@@ -46,7 +46,9 @@ def mix_stems(
     return mixed
 
 
-def master(mixed_audio: np.ndarray, sample_rate: int, lufs_target: float = -14.0) -> np.ndarray:
+def master(
+    mixed_audio: np.ndarray, sample_rate: int, lufs_target: float = -14.0
+) -> np.ndarray:
     """LUFS-normalize the mix to lufs_target, then run a true-peak limiter to prevent clipping.
 
     Integrated loudness is measured and normalized via pyloudnorm, then a Pedalboard Limiter
@@ -55,14 +57,17 @@ def master(mixed_audio: np.ndarray, sample_rate: int, lufs_target: float = -14.0
     """
     meter = pyln.Meter(sample_rate)
     input_loudness = meter.integrated_loudness(mixed_audio)
-    logger.info("Pre-master loudness: %.2f LUFS (target %.2f LUFS)", input_loudness, lufs_target)
+    logger.info(
+        "Pre-master loudness: %.2f LUFS (target %.2f LUFS)", input_loudness, lufs_target
+    )
 
     if not np.isfinite(input_loudness):
         # Near-silent or empty audio (e.g. a failed separation) yields -inf loudness; normalizing
         # against it produces inf/NaN gain. Skip normalization and pass the mix straight to the
         # limiter instead.
         logger.warning(
-            "Non-finite pre-master loudness (%.2f); skipping loudness normalization", input_loudness
+            "Non-finite pre-master loudness (%.2f); skipping loudness normalization",
+            input_loudness,
         )
         normalized = mixed_audio
     else:
@@ -93,7 +98,9 @@ def master(mixed_audio: np.ndarray, sample_rate: int, lufs_target: float = -14.0
 def export_wav(audio: np.ndarray, sample_rate: int, out_path: Path) -> Path:
     """Write audio to out_path as 24-bit PCM WAV."""
     sf.write(str(out_path), audio, sample_rate, subtype=EXPORT_SUBTYPE)
-    logger.info("Exported mastered WAV -> %s (%dHz, %s)", out_path, sample_rate, EXPORT_SUBTYPE)
+    logger.info(
+        "Exported mastered WAV -> %s (%dHz, %s)", out_path, sample_rate, EXPORT_SUBTYPE
+    )
     return out_path
 
 

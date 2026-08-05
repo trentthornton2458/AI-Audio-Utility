@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import os
-import sys
 import ctypes
 import ctypes.util
-from typing import Dict, Any
+import os
+import sys
+from typing import Any, Dict
 
 from PySide6.QtCore import QCoreApplication
+
 from app.cache import get_logger
 
 logger = get_logger(__name__)
@@ -33,10 +34,16 @@ def check_pyside6_plugins() -> bool:
             try:
                 files = os.listdir(platforms_path)
                 if files:
-                    logger.info("Found PySide6 platform plugins in %s: %s", platforms_path, files)
+                    logger.info(
+                        "Found PySide6 platform plugins in %s: %s",
+                        platforms_path,
+                        files,
+                    )
                     return True
             except Exception as e:
-                logger.error("Failed to list platform files in %s: %s", platforms_path, e)
+                logger.error(
+                    "Failed to list platform files in %s: %s", platforms_path, e
+                )
 
     logger.error("No valid PySide6 platforms plugins found in library paths: %s", paths)
     return False
@@ -80,6 +87,7 @@ def get_system_ram_gb() -> float:
     """Return total physical RAM in gigabytes (GB)."""
     try:
         if sys.platform == "win32":
+
             class MEMORYSTATUSEX(ctypes.Structure):
                 _fields_ = [
                     ("dwLength", ctypes.c_ulong),
@@ -92,16 +100,17 @@ def get_system_ram_gb() -> float:
                     ("ullAvailVirtual", ctypes.c_ulonglong),
                     ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
                 ]
+
             stat = MEMORYSTATUSEX()
             stat.dwLength = ctypes.sizeof(stat)
             if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
-                return stat.ullTotalPhys / (1024 ** 3)
+                return stat.ullTotalPhys / (1024**3)
         else:
             # Unix-like fallback
             try:
-                pagesize = os.sysconf('SC_PAGE_SIZE')
-                pages = os.sysconf('SC_PHYS_PAGES')
-                return (pagesize * pages) / (1024 ** 3)
+                pagesize = os.sysconf("SC_PAGE_SIZE")
+                pages = os.sysconf("SC_PHYS_PAGES")
+                return (pagesize * pages) / (1024**3)
             except (AttributeError, ValueError, OSError):
                 pass
 
@@ -112,7 +121,7 @@ def get_system_ram_gb() -> float:
                         if "MemTotal" in line:
                             parts = line.split()
                             if len(parts) >= 2:
-                                return int(parts[1]) / (1024 ** 2)
+                                return int(parts[1]) / (1024**2)
     except Exception as e:
         logger.warning("Failed to determine system RAM: %s", e)
 

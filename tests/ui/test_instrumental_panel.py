@@ -166,7 +166,10 @@ def test_instrumental_panel_preset_loading_and_saving(qtbot):
         assert loaded_settings.instrumental_gain_db == 5.0
         assert loaded_settings.instrumental_mud_cut_hz == 50.0
 
-        with patch("PySide6.QtWidgets.QInputDialog.getText", return_value=("saved_from_instr_panel", True)):
+        with patch(
+            "PySide6.QtWidgets.QInputDialog.getText",
+            return_value=("saved_from_instr_panel", True),
+        ):
             panel.on_save_preset_clicked()
 
         saved_preset = presets.load_preset("saved_from_instr_panel", cache_mgr)
