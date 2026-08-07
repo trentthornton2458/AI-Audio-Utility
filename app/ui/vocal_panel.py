@@ -20,21 +20,10 @@ from typing import Optional
 import numpy as np
 import soundfile as sf
 from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
-    QDoubleSpinBox,
-    QFrame,
-    QGroupBox,
-    QHBoxLayout,
-    QInputDialog,
-    QLabel,
-    QMessageBox,
-    QPushButton,
-    QSlider,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFrame,
+                               QGroupBox, QHBoxLayout, QInputDialog, QLabel,
+                               QMessageBox, QPushButton, QSlider, QVBoxLayout,
+                               QWidget)
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
@@ -137,7 +126,6 @@ class IntensitySlider(QWidget):
         self.value_label.setText(f"{int_val}%")
 
 
-
 class VocalPanel(QWidget):
     """Control panel QWidget for configuring vocal stem cleaning, DSP parameters, and gain."""
 
@@ -198,6 +186,13 @@ class VocalPanel(QWidget):
             "QComboBox::drop-down { border: none; }"
             "QComboBox QAbstractItemView { background-color: #232533; color: #ffffff; selection-background-color: #6c5ce7; }"
         )
+        self._preset_combo.setToolTip(
+            "Select from factory or custom presets to clean vocals"
+        )
+        self._preset_combo.setAccessibleName("Vocal Preset Dropdown")
+        self._preset_combo.setAccessibleDescription(
+            "Select a predefined configuration preset for cleaning and master of vocal stems."
+        )
         self._preset_combo.currentIndexChanged.connect(self.on_preset_changed)
         preset_layout.addWidget(self._preset_combo)
 
@@ -206,6 +201,11 @@ class VocalPanel(QWidget):
         self._save_preset_button.setStyleSheet(
             "QPushButton { background-color: #3b3e54; color: #ffffff; border: none; border-radius: 4px; padding: 6px 14px; font-size: 12px; font-weight: bold; }"
             "QPushButton:hover { background-color: #4b4e69; }"
+        )
+        self._save_preset_button.setToolTip("Save current settings as a custom preset")
+        self._save_preset_button.setAccessibleName("Save Preset Button")
+        self._save_preset_button.setAccessibleDescription(
+            "Saves the current vocal panel configuration sliders to a custom named preset."
         )
         self._save_preset_button.clicked.connect(self.on_save_preset_clicked)
         preset_layout.addWidget(self._save_preset_button)
@@ -216,6 +216,13 @@ class VocalPanel(QWidget):
         self._auto_tune_button.setStyleSheet(
             "QPushButton { background-color: #00cec9; color: #ffffff; border: none; border-radius: 4px; padding: 6px 14px; font-size: 12px; font-weight: bold; }"
             "QPushButton:hover { background-color: #81ecec; }"
+        )
+        self._auto_tune_button.setToolTip(
+            "Analyze vocal stem with Gemini AI to auto-tune parameters"
+        )
+        self._auto_tune_button.setAccessibleName("Gemini AI Auto-Tune Button")
+        self._auto_tune_button.setAccessibleDescription(
+            "Runs background AI analysis on the extracted vocal and instrumental stems to automatically recommend optimal settings."
         )
         self._auto_tune_button.clicked.connect(self.autoTuneRequested.emit)
         preset_layout.addWidget(self._auto_tune_button)
@@ -234,8 +241,21 @@ class VocalPanel(QWidget):
         # Denoise Row
         self._denoise_widget = IntensitySlider(
             "Enable Denoise",
-            initial_value=int(round(self._current_settings.vocal_denoise_intensity * 100)),
+            initial_value=int(
+                round(self._current_settings.vocal_denoise_intensity * 100)
+            ),
             checked=self._current_settings.vocal_denoise_enabled,
+        )
+        self._denoise_widget.checkbox.setToolTip(
+            "Toggle pre-DSP neural noise reduction"
+        )
+        self._denoise_widget.slider.setToolTip(
+            "Adjust noise reduction depth from 0% to 100%"
+        )
+        self._denoise_widget.checkbox.setAccessibleName("Enable Vocal Denoise Checkbox")
+        self._denoise_widget.slider.setAccessibleName("Vocal Denoise Intensity Slider")
+        self._denoise_widget.slider.setAccessibleDescription(
+            "Controls the intensity of the pre-DSP neural noise reduction from 0 to 100 percent."
         )
         self._denoise_cb = self._denoise_widget.checkbox
         self._denoise_slider = self._denoise_widget.slider
@@ -247,9 +267,26 @@ class VocalPanel(QWidget):
         # Enhance Row (hard-capped at 35% -- see app.core.qa_gate.MAX_ENHANCE_GAIN)
         self._enhance_widget = IntensitySlider(
             "Enable Harmonic Enhancement",
-            initial_value=int(round(self._current_settings.vocal_enhance_intensity * 100)),
+            initial_value=int(
+                round(self._current_settings.vocal_enhance_intensity * 100)
+            ),
             checked=self._current_settings.vocal_enhance_enabled,
             max_value=35,
+        )
+        self._enhance_widget.checkbox.setToolTip(
+            "Toggle neural harmonic reconstruction"
+        )
+        self._enhance_widget.slider.setToolTip(
+            "Adjust harmonic enhancement intensity from 0% to 35% (hard-capped to preserve quality)"
+        )
+        self._enhance_widget.checkbox.setAccessibleName(
+            "Enable Vocal Harmonic Enhancement Checkbox"
+        )
+        self._enhance_widget.slider.setAccessibleName(
+            "Vocal Harmonic Enhancement Slider"
+        )
+        self._enhance_widget.slider.setAccessibleDescription(
+            "Controls the neural harmonic reconstruction intensity, blended with a QA-gated residual blend up to 35 percent limit."
         )
         self._enhance_cb = self._enhance_widget.checkbox
         self._enhance_slider = self._enhance_widget.slider
@@ -274,7 +311,9 @@ class VocalPanel(QWidget):
         notch_header = QHBoxLayout()
         notch_title = QLabel("<b>Harshness Cut (4kHz Notch Depth)</b>")
         notch_title.setStyleSheet("color: #ffffff;")
-        notch_desc = QLabel("<span style='color: #8a8d9b; font-size: 11px;'>(Reduces pinched Suno frequencies)</span>")
+        notch_desc = QLabel(
+            "<span style='color: #8a8d9b; font-size: 11px;'>(Reduces pinched Suno frequencies)</span>"
+        )
 
         # Map notch depth to display string, e.g. "-4.5 dB"
         notch_val = self._current_settings.notch_depth_db
@@ -291,6 +330,13 @@ class VocalPanel(QWidget):
         self._notch_slider.setRange(NOTCH_SLIDER_MIN, NOTCH_SLIDER_MAX)
         self._notch_slider.setValue(int(round(notch_val * 10)))
         self._notch_slider.setStyleSheet(self._slider_style(accent_color="#ff7675"))
+        self._notch_slider.setToolTip(
+            "Adjust notch filter depth at 4kHz to cut metallic harshness (-3.0 to -6.0 dB)"
+        )
+        self._notch_slider.setAccessibleName("Harshness Cut Slider")
+        self._notch_slider.setAccessibleDescription(
+            "Reduces metallic resonance and pinched frequencies common in Suno AI audio around 4kHz."
+        )
         self._notch_slider.valueChanged.connect(self.on_notch_depth_changed)
         notch_row.addWidget(self._notch_slider)
         dsp_layout.addLayout(notch_row)
@@ -300,7 +346,9 @@ class VocalPanel(QWidget):
         deesser_header = QHBoxLayout()
         deesser_title = QLabel("<b>De-Esser (Sibilance Reduction)</b>")
         deesser_title.setStyleSheet("color: #ffffff;")
-        deesser_desc = QLabel("<span style='color: #8a8d9b; font-size: 11px;'>(Reduces harsh 's' sounds)</span>")
+        deesser_desc = QLabel(
+            "<span style='color: #8a8d9b; font-size: 11px;'>(Reduces harsh 's' sounds)</span>"
+        )
 
         deesser_val = self._current_settings.vocal_deesser_depth_db
         self._deesser_val_label = QLabel(f"{deesser_val:.1f} dB")
@@ -316,6 +364,13 @@ class VocalPanel(QWidget):
         self._deesser_slider.setRange(-240, 0)
         self._deesser_slider.setValue(int(round(deesser_val * 10)))
         self._deesser_slider.setStyleSheet(self._slider_style(accent_color="#74b9ff"))
+        self._deesser_slider.setToolTip(
+            "Adjust de-esser filter depth to tame harsh sibilance ('s' sounds, -24.0 to 0.0 dB)"
+        )
+        self._deesser_slider.setAccessibleName("Vocal De-Esser Depth Slider")
+        self._deesser_slider.setAccessibleDescription(
+            "Controls the amount of high-frequency attenuation applied to harsh sibilant vocal consonants."
+        )
         self._deesser_slider.valueChanged.connect(self.on_deesser_depth_changed)
         deesser_row.addWidget(self._deesser_slider)
         dsp_layout.addLayout(deesser_row)
@@ -332,6 +387,13 @@ class VocalPanel(QWidget):
         self._gain_spinner.setSuffix(" dB")
         self._gain_spinner.setStyleSheet(
             "QDoubleSpinBox { background-color: #2b2d3e; color: #ffffff; border: 1px solid #3d3f52; border-radius: 4px; padding: 4px 8px; font-weight: bold; width: 100px; }"
+        )
+        self._gain_spinner.setToolTip(
+            "Adjust vocal stem output gain (-24.0 to +24.0 dB)"
+        )
+        self._gain_spinner.setAccessibleName("Vocal Gain Spinbox")
+        self._gain_spinner.setAccessibleDescription(
+            "Sets the relative output level in decibels for the vocal stem before final mixing and limiting."
         )
         self._gain_spinner.valueChanged.connect(self.on_gain_changed)
 
@@ -387,6 +449,13 @@ class VocalPanel(QWidget):
             "QPushButton:pressed { background-color: #009788; }"
             "QPushButton:disabled { background-color: #3d3f52; color: #8a8d9b; }"
         )
+        self._apply_button.setToolTip(
+            "Apply current vocal panel settings and render master track"
+        )
+        self._apply_button.setAccessibleName("Apply Settings and Render Button")
+        self._apply_button.setAccessibleDescription(
+            "Applies the current vocal processing choices and starts the full rendering and mastering pipeline."
+        )
         self._apply_button.clicked.connect(self.on_apply_clicked)
         action_layout.addWidget(self._apply_button)
 
@@ -401,11 +470,17 @@ class VocalPanel(QWidget):
     def get_settings(self) -> Settings:
         """Assemble and return the current panel values into a Settings object."""
         self._current_settings.vocal_denoise_enabled = self._denoise_cb.isChecked()
-        self._current_settings.vocal_denoise_intensity = self._denoise_slider.value() / 100.0
+        self._current_settings.vocal_denoise_intensity = (
+            self._denoise_slider.value() / 100.0
+        )
         self._current_settings.vocal_enhance_enabled = self._enhance_cb.isChecked()
-        self._current_settings.vocal_enhance_intensity = self._enhance_slider.value() / 100.0
+        self._current_settings.vocal_enhance_intensity = (
+            self._enhance_slider.value() / 100.0
+        )
         self._current_settings.notch_depth_db = float(self._notch_slider.value()) / 10.0
-        self._current_settings.vocal_deesser_depth_db = float(self._deesser_slider.value()) / 10.0
+        self._current_settings.vocal_deesser_depth_db = (
+            float(self._deesser_slider.value()) / 10.0
+        )
         self._current_settings.vocal_gain_db = self._gain_spinner.value()
         return Settings.from_preset(self._current_settings.to_preset())
 
@@ -421,14 +496,22 @@ class VocalPanel(QWidget):
         try:
             # Update UI controls without triggering unwanted state mutations
             self._denoise_cb.setChecked(preset.vocal_denoise_enabled)
-            self._denoise_slider.setValue(int(round(preset.vocal_denoise_intensity * 100)))
+            self._denoise_slider.setValue(
+                int(round(preset.vocal_denoise_intensity * 100))
+            )
             self._denoise_slider.setEnabled(preset.vocal_denoise_enabled)
-            self._denoise_val_label.setText(f"{int(round(preset.vocal_denoise_intensity * 100))}%")
+            self._denoise_val_label.setText(
+                f"{int(round(preset.vocal_denoise_intensity * 100))}%"
+            )
 
             self._enhance_cb.setChecked(preset.vocal_enhance_enabled)
-            self._enhance_slider.setValue(int(round(preset.vocal_enhance_intensity * 100)))
+            self._enhance_slider.setValue(
+                int(round(preset.vocal_enhance_intensity * 100))
+            )
             self._enhance_slider.setEnabled(preset.vocal_enhance_enabled)
-            self._enhance_val_label.setText(f"{int(round(preset.vocal_enhance_intensity * 100))}%")
+            self._enhance_val_label.setText(
+                f"{int(round(preset.vocal_enhance_intensity * 100))}%"
+            )
 
             notch_val = preset.notch_depth_db
             slider_notch = int(round(notch_val * 10))
@@ -476,14 +559,18 @@ class VocalPanel(QWidget):
             loaded = presets.load_preset(name, self._cache_manager)
         except Exception as exc:
             logger.error("Failed to load preset %r: %s", name, exc)
-            QMessageBox.warning(self, "Preset Load Error", f"Failed to load preset '{name}': {exc}")
+            QMessageBox.warning(
+                self, "Preset Load Error", f"Failed to load preset '{name}': {exc}"
+            )
         else:
             self.set_settings(loaded)
             logger.info("Loaded preset %r into VocalPanel", name)
 
     @Slot()
     def on_save_preset_clicked(self) -> None:
-        name, ok = QInputDialog.getText(self, "Save Preset As", "Enter a name for the new preset:")
+        name, ok = QInputDialog.getText(
+            self, "Save Preset As", "Enter a name for the new preset:"
+        )
         if not ok or not name.strip():
             return
 
@@ -494,7 +581,9 @@ class VocalPanel(QWidget):
             presets.save_preset(name, current_preset, self._cache_manager)
         except Exception as exc:
             logger.error("Failed to save preset %r: %s", name, exc)
-            QMessageBox.critical(self, "Save Preset Error", f"Failed to save preset '{name}': {exc}")
+            QMessageBox.critical(
+                self, "Save Preset Error", f"Failed to save preset '{name}': {exc}"
+            )
         else:
             logger.info("Saved preset %r from VocalPanel", name)
             self.load_presets_list()
@@ -554,11 +643,15 @@ class VocalPanel(QWidget):
         """Toggle visibility of the expandable QA metric details panel."""
         self._qa_details_panel.setVisible(not self._qa_details_panel.isVisible())
 
-    def update_qa_from_file(self, file_path: Path | str, silence_threshold_db: float = -30.0) -> dict[str, QAMetricResult]:
+    def update_qa_from_file(
+        self, file_path: Path | str, silence_threshold_db: float = -30.0
+    ) -> dict[str, QAMetricResult]:
         """Run app.core.qa_gate warn-only metrics on a rendered audio file and surface caution badge if flagged."""
         try:
             audio, samplerate = sf.read(str(file_path), always_2d=True, dtype="float64")
-            return self.update_qa_metrics(audio, samplerate, silence_threshold_db=silence_threshold_db)
+            return self.update_qa_metrics(
+                audio, samplerate, silence_threshold_db=silence_threshold_db
+            )
         except Exception as exc:
             logger.warning("Failed to evaluate QA metrics for %s: %s", file_path, exc)
             self.clear_qa_warning()
@@ -572,7 +665,9 @@ class VocalPanel(QWidget):
     ) -> dict[str, QAMetricResult]:
         """Evaluate the three warn-only QA metrics on audio array and update caution badge state."""
         pitch_res = qa_gate.measure_pitch_variance(audio, samplerate)
-        hf_res = qa_gate.measure_high_frequency_energy(audio, samplerate, silence_threshold_db=silence_threshold_db)
+        hf_res = qa_gate.measure_high_frequency_energy(
+            audio, samplerate, silence_threshold_db=silence_threshold_db
+        )
         crest_res = qa_gate.measure_crest_factor(audio)
 
         results = {
@@ -594,7 +689,9 @@ class VocalPanel(QWidget):
 
         count = len(warning_items)
         plural = "s" if count > 1 else ""
-        self._qa_badge.setText(f"⚠️ QA Caution: {count} signal quality metric{plural} flagged (click for details)")
+        self._qa_badge.setText(
+            f"⚠️ QA Caution: {count} signal quality metric{plural} flagged (click for details)"
+        )
 
         tooltip_lines = ["⚠️ Audio Quality Caution (Warn Only):"]
         details_lines = [
@@ -627,7 +724,9 @@ class VocalPanel(QWidget):
             status = "⚠️ WARN" if res.warning else "✓ OK"
             status_color = "#ff7675" if res.warning else "#55efc4"
 
-            tooltip_lines.append(f"• [{status}] {label}: {val_str} (warn limit: {thresh_str})")
+            tooltip_lines.append(
+                f"• [{status}] {label}: {val_str} (warn limit: {thresh_str})"
+            )
             if res.warning:
                 tooltip_lines.append(f"  Reason: {desc}")
 
