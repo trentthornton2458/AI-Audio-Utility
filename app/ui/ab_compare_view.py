@@ -13,17 +13,9 @@ from pathlib import Path
 from typing import Optional, Union
 
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import (
-    QButtonGroup,
-    QCheckBox,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QRadioButton,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QHBoxLayout,
+                               QLabel, QPushButton, QRadioButton, QVBoxLayout,
+                               QWidget)
 
 from app.cache import get_logger
 from app.cache.cache_manager import CacheManager
@@ -123,6 +115,13 @@ class ABCompareView(QWidget):
         # Synchronized Playback Controls
         self._play_both_button = QPushButton("Play All")
         self._play_both_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._play_both_button.setToolTip(
+            "Start synchronized playback of all comparison tracks simultaneously."
+        )
+        self._play_both_button.setAccessibleName("Play All")
+        self._play_both_button.setAccessibleDescription(
+            "Plays all loaded comparison audio tracks at the same time, maintaining playhead sync."
+        )
         self._play_both_button.setStyleSheet(
             "QPushButton { background-color: #00b894; color: white; font-weight: bold; padding: 6px 14px; border-radius: 4px; border: none; }"
             "QPushButton:hover { background-color: #00cec9; }"
@@ -132,6 +131,13 @@ class ABCompareView(QWidget):
 
         self._pause_both_button = QPushButton("Pause All")
         self._pause_both_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._pause_both_button.setToolTip(
+            "Pause synchronized playback of all comparison tracks."
+        )
+        self._pause_both_button.setAccessibleName("Pause All")
+        self._pause_both_button.setAccessibleDescription(
+            "Pauses all loaded comparison audio tracks simultaneously."
+        )
         self._pause_both_button.setStyleSheet(
             "QPushButton { background-color: #3b3e54; color: white; font-weight: bold; padding: 6px 14px; border-radius: 4px; border: none; }"
             "QPushButton:hover { background-color: #4b4e69; }"
@@ -141,12 +147,28 @@ class ABCompareView(QWidget):
 
         self._sync_seek_cb = QCheckBox("Sync Playhead")
         self._sync_seek_cb.setChecked(True)
-        self._sync_seek_cb.setStyleSheet("QCheckBox { color: #55efc4; font-weight: bold; }")
+        self._sync_seek_cb.setToolTip(
+            "Enable to automatically link seek positions and playback states across all tracks."
+        )
+        self._sync_seek_cb.setAccessibleName("Synchronize Playhead")
+        self._sync_seek_cb.setAccessibleDescription(
+            "When enabled, seeking or playing one track automatically syncs all other tracks."
+        )
+        self._sync_seek_cb.setStyleSheet(
+            "QCheckBox { color: #55efc4; font-weight: bold; }"
+        )
         top_layout.addWidget(self._sync_seek_cb)
 
         # Blind Mode Toggle & Reshuffle Buttons
         self._reveal_button = QPushButton("👁 Reveal Identities")
         self._reveal_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._reveal_button.setToolTip(
+            "Show the real identity of Option A, Option B, and Option C."
+        )
+        self._reveal_button.setAccessibleName("Reveal Track Identities")
+        self._reveal_button.setAccessibleDescription(
+            "Reveals the actual track names (Raw, DSP-Humanized, Ground Truth Reference) of the players."
+        )
         self._reveal_button.setStyleSheet(
             "QPushButton { background-color: #6c5ce7; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; border: none; }"
             "QPushButton:hover { background-color: #7d6dfa; }"
@@ -156,6 +178,13 @@ class ABCompareView(QWidget):
 
         self._shuffle_button = QPushButton("🔀 Reshuffle")
         self._shuffle_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._shuffle_button.setToolTip(
+            "Randomly shuffle track slots A, B, and C to restart a blind trial."
+        )
+        self._shuffle_button.setAccessibleName("Reshuffle Track Slots")
+        self._shuffle_button.setAccessibleDescription(
+            "Randomly re-assigns the Raw Input, DSP-Humanized, and Reference tracks to Option A, B, and C slots."
+        )
         self._shuffle_button.setStyleSheet(
             "QPushButton { background-color: #2d2f3d; color: #d0d3e0; font-weight: bold; padding: 6px 12px; border-radius: 4px; border: none; }"
             "QPushButton:hover { background-color: #3d3f4d; color: white; }"
@@ -165,7 +194,9 @@ class ABCompareView(QWidget):
 
         # Solo Selection (A/B/C Toggle)
         solo_frame = QFrame()
-        solo_frame.setStyleSheet("QFrame { background-color: #15161e; border-radius: 4px; padding: 2px 6px; }")
+        solo_frame.setStyleSheet(
+            "QFrame { background-color: #15161e; border-radius: 4px; padding: 2px 6px; }"
+        )
         solo_layout = QHBoxLayout(solo_frame)
         solo_layout.setContentsMargins(4, 2, 4, 2)
         solo_layout.setSpacing(8)
@@ -177,16 +208,44 @@ class ABCompareView(QWidget):
         self._btn_group = QButtonGroup(self)
         self._radio_both = QRadioButton("All")
         self._radio_both.setChecked(True)
+        self._radio_both.setToolTip(
+            "Unmute all players to hear full sound comparison simultaneously."
+        )
+        self._radio_both.setAccessibleName("Listen to All Tracks")
+        self._radio_both.setAccessibleDescription(
+            "Selects and unmutes all comparison audio players."
+        )
         self._radio_both.setStyleSheet("QRadioButton { color: #ffffff; }")
 
         self._radio_original = QRadioButton("Option A")
-        self._radio_original.setStyleSheet("QRadioButton { color: #7d6dfa; font-weight: bold; }")
+        self._radio_original.setToolTip("Solo and listen to Option A only.")
+        self._radio_original.setAccessibleName("Solo Option A")
+        self._radio_original.setAccessibleDescription(
+            "Mutes Options B and C to listen exclusively to Option A."
+        )
+        self._radio_original.setStyleSheet(
+            "QRadioButton { color: #7d6dfa; font-weight: bold; }"
+        )
 
         self._radio_cleaned = QRadioButton("Option B")
-        self._radio_cleaned.setStyleSheet("QRadioButton { color: #55efc4; font-weight: bold; }")
+        self._radio_cleaned.setToolTip("Solo and listen to Option B only.")
+        self._radio_cleaned.setAccessibleName("Solo Option B")
+        self._radio_cleaned.setAccessibleDescription(
+            "Mutes Options A and C to listen exclusively to Option B."
+        )
+        self._radio_cleaned.setStyleSheet(
+            "QRadioButton { color: #55efc4; font-weight: bold; }"
+        )
 
         self._radio_reference = QRadioButton("Option C")
-        self._radio_reference.setStyleSheet("QRadioButton { color: #fdcb6e; font-weight: bold; }")
+        self._radio_reference.setToolTip("Solo and listen to Option C only.")
+        self._radio_reference.setAccessibleName("Solo Option C")
+        self._radio_reference.setAccessibleDescription(
+            "Mutes Options A and B to listen exclusively to Option C."
+        )
+        self._radio_reference.setStyleSheet(
+            "QRadioButton { color: #fdcb6e; font-weight: bold; }"
+        )
 
         self._btn_group.addButton(self._radio_both, 0)
         self._btn_group.addButton(self._radio_original, 1)
@@ -221,7 +280,9 @@ class ABCompareView(QWidget):
         main_layout.addWidget(self._spectrogram_view)
 
         # Render History Panel
-        self._render_history_panel = RenderHistoryPanel(cache_manager=self._cache_manager)
+        self._render_history_panel = RenderHistoryPanel(
+            cache_manager=self._cache_manager
+        )
         main_layout.addWidget(self._render_history_panel)
 
     def _wire_events(self) -> None:
@@ -229,13 +290,25 @@ class ABCompareView(QWidget):
         self._player_b.seekRequested.connect(lambda pos: self._on_player_seek(1, pos))
         self._player_c.seekRequested.connect(lambda pos: self._on_player_seek(2, pos))
 
-        self._player_a.positionChanged.connect(lambda pos: self._on_player_position_changed(0, pos))
-        self._player_b.positionChanged.connect(lambda pos: self._on_player_position_changed(1, pos))
-        self._player_c.positionChanged.connect(lambda pos: self._on_player_position_changed(2, pos))
+        self._player_a.positionChanged.connect(
+            lambda pos: self._on_player_position_changed(0, pos)
+        )
+        self._player_b.positionChanged.connect(
+            lambda pos: self._on_player_position_changed(1, pos)
+        )
+        self._player_c.positionChanged.connect(
+            lambda pos: self._on_player_position_changed(2, pos)
+        )
 
-        self._player_a.playbackStateChanged.connect(lambda st: self._on_player_state_changed(0, st))
-        self._player_b.playbackStateChanged.connect(lambda st: self._on_player_state_changed(1, st))
-        self._player_c.playbackStateChanged.connect(lambda st: self._on_player_state_changed(2, st))
+        self._player_a.playbackStateChanged.connect(
+            lambda st: self._on_player_state_changed(0, st)
+        )
+        self._player_b.playbackStateChanged.connect(
+            lambda st: self._on_player_state_changed(1, st)
+        )
+        self._player_c.playbackStateChanged.connect(
+            lambda st: self._on_player_state_changed(2, st)
+        )
 
         self._render_history_panel.renderSelected.connect(self.load_cleaned)
 
@@ -284,20 +357,56 @@ class ABCompareView(QWidget):
             src_key = self._slots[idx]
             label = self._get_source_label(src_key)
             if self._is_revealed:
-                players[idx]._title_label.setText(f"<b>Option {letters[idx]}:</b> {label}")
+                players[idx]._title_label.setText(
+                    f"<b>Option {letters[idx]}:</b> {label}"
+                )
+                players[idx]._canvas.setAccessibleName(
+                    f"Option {letters[idx]} ({label}) Waveform Display"
+                )
                 radios[idx].setText(f"Option {letters[idx]} ({label})")
+                radios[idx].setToolTip(
+                    f"Solo and listen to Option {letters[idx]} ({label}) only."
+                )
+                radios[idx].setAccessibleName(f"Solo Option {letters[idx]} ({label})")
+                radios[idx].setAccessibleDescription(
+                    f"Mutes other options to listen exclusively to Option {letters[idx]} ({label})."
+                )
             else:
                 players[idx]._title_label.setText(f"<b>Option {letters[idx]}</b>")
+                players[idx]._canvas.setAccessibleName(
+                    f"Option {letters[idx]} Waveform Display"
+                )
                 radios[idx].setText(f"Option {letters[idx]}")
+                radios[idx].setToolTip(
+                    f"Solo and listen to Option {letters[idx]} only."
+                )
+                radios[idx].setAccessibleName(f"Solo Option {letters[idx]}")
+                radios[idx].setAccessibleDescription(
+                    f"Mutes other options to listen exclusively to Option {letters[idx]}."
+                )
 
         if self._is_revealed:
             self._reveal_button.setText("🙈 Hide Identities (Blind Mode)")
+            self._reveal_button.setToolTip(
+                "Hide real track names to re-enable blind testing mode."
+            )
+            self._reveal_button.setAccessibleName("Hide Track Identities")
+            self._reveal_button.setAccessibleDescription(
+                "Enables blind mode to conceal track identities behind A, B, C placeholders."
+            )
             self._reveal_button.setStyleSheet(
                 "QPushButton { background-color: #e17055; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; border: none; }"
                 "QPushButton:hover { background-color: #ff7675; }"
             )
         else:
             self._reveal_button.setText("👁 Reveal Identities")
+            self._reveal_button.setToolTip(
+                "Show the real identity of Option A, Option B, and Option C."
+            )
+            self._reveal_button.setAccessibleName("Reveal Track Identities")
+            self._reveal_button.setAccessibleDescription(
+                "Reveals the actual track names (Raw, DSP-Humanized, Ground Truth Reference) of the players."
+            )
             self._reveal_button.setStyleSheet(
                 "QPushButton { background-color: #6c5ce7; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; border: none; }"
                 "QPushButton:hover { background-color: #7d6dfa; }"
@@ -384,7 +493,11 @@ class ABCompareView(QWidget):
 
         self._update_player_files()
         self.update_blind_labels()
-        logger.info("ABCompareView loaded ground truth reference (%s): %s", self._active_reference_key, self._reference_path)
+        logger.info(
+            "ABCompareView loaded ground truth reference (%s): %s",
+            self._active_reference_key,
+            self._reference_path,
+        )
 
     def clear(self) -> None:
         """Clear all players."""
@@ -469,6 +582,7 @@ class ABCompareView(QWidget):
 
     def _on_player_state_changed(self, sender_idx: int, state: object) -> None:
         from PySide6.QtMultimedia import QMediaPlayer
+
         if self._sync_seek_cb.isChecked() and not self._syncing_state:
             players = [self._player_a, self._player_b, self._player_c]
             self._syncing_state = True
@@ -500,15 +614,21 @@ class ABCompareView(QWidget):
 
     @Slot(int)
     def on_cleaned_seek(self, position_ms: int) -> None:
-        self._on_player_seek(self._get_player_index_for_source("humanized"), position_ms)
+        self._on_player_seek(
+            self._get_player_index_for_source("humanized"), position_ms
+        )
 
     @Slot(int)
     def on_original_position_changed(self, position_ms: int) -> None:
-        self._on_player_position_changed(self._get_player_index_for_source("raw"), position_ms)
+        self._on_player_position_changed(
+            self._get_player_index_for_source("raw"), position_ms
+        )
 
     @Slot(int)
     def on_cleaned_position_changed(self, position_ms: int) -> None:
-        self._on_player_position_changed(self._get_player_index_for_source("humanized"), position_ms)
+        self._on_player_position_changed(
+            self._get_player_index_for_source("humanized"), position_ms
+        )
 
     @Slot(object)
     def on_original_state_changed(self, state: object) -> None:
@@ -516,7 +636,9 @@ class ABCompareView(QWidget):
 
     @Slot(object)
     def on_cleaned_state_changed(self, state: object) -> None:
-        self._on_player_state_changed(self._get_player_index_for_source("humanized"), state)
+        self._on_player_state_changed(
+            self._get_player_index_for_source("humanized"), state
+        )
 
     @Slot(int, bool)
     def on_solo_mode_changed(self, button_id: int, checked: bool) -> None:
